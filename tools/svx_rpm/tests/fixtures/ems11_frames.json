@@ -1,0 +1,68 @@
+{
+ "source": "hyundai_kia_generic.dbc BO_ 790 EMS11, SG_ N : 16|16@1+ (0.25,0)",
+ "frames": [
+  {
+   "name": "idle_800",
+   "dat": "0080800c00000000",
+   "raw": 3200,
+   "rpm": 800.0,
+   "reason": "ok"
+  },
+  {
+   "name": "le_not_be",
+   "dat": "0000341200000000",
+   "raw": 4660,
+   "rpm": 1165.0,
+   "reason": "ok"
+  },
+  {
+   "name": "r6500",
+   "dat": "0100906500000000",
+   "raw": 26000,
+   "rpm": 6500.0,
+   "reason": "ok"
+  },
+  {
+   "name": "other_bytes_ignored",
+   "dat": "f9ff401fffffffff",
+   "raw": 8000,
+   "rpm": 2000.0,
+   "reason": "ok"
+  },
+  {
+   "name": "zero_engine_stopped",
+   "dat": "0100000000000000",
+   "raw": 0,
+   "rpm": 0.0,
+   "reason": "engine_stopped"
+  },
+  {
+   "name": "fault_bit",
+   "dat": "0200800c00000000",
+   "raw": 3200,
+   "rpm": 800.0,
+   "reason": "fault"
+  },
+  {
+   "name": "sna",
+   "dat": "0000ffff00000000",
+   "raw": 65535,
+   "rpm": 16383.75,
+   "reason": "sna"
+  },
+  {
+   "name": "boundary_9000",
+   "dat": "0000a08c00000000",
+   "raw": 36000,
+   "rpm": 9000.0,
+   "reason": "ok"
+  },
+  {
+   "name": "implausible_9001",
+   "dat": "0000a48c00000000",
+   "raw": 36004,
+   "rpm": 9001.0,
+   "reason": "implausible"
+  }
+ ]
+}

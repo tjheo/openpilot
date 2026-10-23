@@ -1,0 +1,126 @@
+{
+ "protocol": "SVX1 v1",
+ "vectors": [
+  {
+   "name": "valid",
+   "hex": "535658310103000005ec7051000000070000002a0c80000c0001e2406067881e",
+   "key": "",
+   "ok": true,
+   "expect": {
+    "flags": 3,
+    "session_id": 99381329,
+    "seq": 7,
+    "frame_counter": 42,
+    "rpm_raw": 3200,
+    "frame_age_ms": 12,
+    "sender_mono_ms": 123456
+   }
+  },
+  {
+   "name": "valid_auth",
+   "hex": "535658310183000005ec7051000000070000002a0c80000c0001e2406bf3ba7e8b82999d5c16b992",
+   "key": "svx-fixture-key-0123456789",
+   "ok": true,
+   "expect": {
+    "flags": 131,
+    "session_id": 99381329,
+    "seq": 7,
+    "frame_counter": 42,
+    "rpm_raw": 3200,
+    "frame_age_ms": 12,
+    "sender_mono_ms": 123456
+   }
+  },
+  {
+   "name": "short",
+   "hex": "535658310103000005ec7051000000070000002a0c80000c0001e240606788",
+   "key": "",
+   "ok": false,
+   "error": "length"
+  },
+  {
+   "name": "long",
+   "hex": "535658310103000005ec7051000000070000002a0c80000c0001e2406067881e00",
+   "key": "",
+   "ok": false,
+   "error": "length"
+  },
+  {
+   "name": "empty",
+   "hex": "",
+   "key": "",
+   "ok": false,
+   "error": "length"
+  },
+  {
+   "name": "magic",
+   "hex": "585658310103000005ec7051000000070000002a0c80000c0001e2406f1667d1",
+   "key": "",
+   "ok": false,
+   "error": "magic"
+  },
+  {
+   "name": "version",
+   "hex": "535658310203000005ec7051000000070000002a0c80000c0001e24038792136",
+   "key": "",
+   "ok": false,
+   "error": "version"
+  },
+  {
+   "name": "crc",
+   "hex": "535658310103000005ec7051000000070000002a0c81000c0001e2406067881e",
+   "key": "",
+   "ok": false,
+   "error": "crc"
+  },
+  {
+   "name": "unknown_flag",
+   "hex": "535658310143000005ec7051000000070000002a0c80000c0001e24065ad912e",
+   "key": "",
+   "ok": false,
+   "error": "flags"
+  },
+  {
+   "name": "reserved",
+   "hex": "535658310103000105ec7051000000070000002a0c80000c0001e240ffbd0b80",
+   "key": "",
+   "ok": false,
+   "error": "flags"
+  },
+  {
+   "name": "zero_session",
+   "hex": "535658310103000000000000000000070000002a0c80000c0001e2405e60a988",
+   "key": "",
+   "ok": false,
+   "error": "session"
+  },
+  {
+   "name": "auth_expected_missing",
+   "hex": "535658310103000005ec7051000000070000002a0c80000c0001e2406067881e",
+   "key": "svx-fixture-key-0123456789",
+   "ok": false,
+   "error": "length"
+  },
+  {
+   "name": "auth_unexpected",
+   "hex": "535658310183000005ec7051000000070000002a0c80000c0001e2406bf3ba7e8b82999d5c16b992",
+   "key": "",
+   "ok": false,
+   "error": "length"
+  },
+  {
+   "name": "auth_bad_tag",
+   "hex": "535658310183000005ec7051000000070000002a0c80000c0001e2406bf3ba7e8b82999d5c16b96d",
+   "key": "svx-fixture-key-0123456789",
+   "ok": false,
+   "error": "auth"
+  },
+  {
+   "name": "auth_wrong_key",
+   "hex": "535658310183000005ec7051000000070000002a0c80000c0001e2406bf3ba7e8b82999d5c16b992",
+   "key": "svx-fixture-key-0123456789x",
+   "ok": false,
+   "error": "auth"
+  }
+ ]
+}
