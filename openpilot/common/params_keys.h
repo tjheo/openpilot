@@ -426,4 +426,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"OnnxBsdThreshold", {PERSISTENT, INT, "94"}},
     {"OnnxBsdSmoothingMs", {PERSISTENT, INT, "200"}},
     {"OnnxBsdIntervalMs", {PERSISTENT, INT, "250"}},
+    // SVX Live: optional read-only RPM telemetry for the SVX phone app (selfdrive/svx_live). Default off.
+    {"SvxLiveEnabled", {PERSISTENT, BOOL, "0"}},
+    {"SvxLivePort", {PERSISTENT, INT, "47816"}},
 };

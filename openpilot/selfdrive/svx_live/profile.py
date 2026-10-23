@@ -9,7 +9,7 @@ kia_seltos_2021_ems11:
   * The CarParams written by card must report brand "hyundai", carFingerprint "KIA_SELTOS" and
     no HyundaiFlags.CANFD bit. Any other selection, including CAN-FD variants, is rejected.
   * Only bus 0 is accepted. TX echoes (src >= 128) never match. That EMS11 is really present on
-    this bus for a given car/year/engine is NOT known from the DBC; check it with `scan` first.
+    this bus for a given car/year/engine is NOT known from the DBC; the app then shows STATUS_NO_FRAME.
 """
 from __future__ import annotations
 

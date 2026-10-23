@@ -8,6 +8,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.multilang import tr, tr_noop
 from openpilot.system.ui.widgets import DialogResult
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.svx_live.manager_policy import ENABLED_PARAM as SVX_LIVE_PARAM, params_has_key
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
@@ -31,6 +32,11 @@ DESCRIPTIONS = {
   'RecordFront': tr_noop("Upload data from the driver facing camera and help improve the driver monitoring algorithm."),
   "IsMetric": tr_noop("Display speed in km/h instead of mph."),
   "RecordAudio": tr_noop("Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."),
+  SVX_LIVE_PARAM: tr_noop(
+    "While driving, send the engine RPM (read-only) to the SVX virtual exhaust phone app on the same Wi-Fi or tailnet. " +
+    "Listens on TCP port 47816 (param SvxLivePort) for phones with a private LAN or tailnet address. There is no key: anyone on that " +
+    "network can read the RPM. Nothing the phone sends can control the car. Off by default."
+  ),
 }
 
 
@@ -91,6 +97,14 @@ class TogglesLayout(Widget):
         False,
       ),
     }
+
+    if params_has_key(self._params, SVX_LIVE_PARAM):  # hidden on a params build without the key
+      self._toggle_defs[SVX_LIVE_PARAM] = (
+        lambda: tr("SVX Live RPM to Phone"),
+        DESCRIPTIONS[SVX_LIVE_PARAM],
+        "network.png",
+        False,
+      )
 
     self._long_personality_setting = multiple_button_item(
       lambda: tr("Driving Personality"),

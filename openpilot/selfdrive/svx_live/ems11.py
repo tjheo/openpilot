@@ -8,7 +8,7 @@ Checked against opendbc_repo/opendbc/dbc/hyundai_kia_generic.dbc in this tree:
 `@1` is Intel/little-endian, start bit 16, length 16: raw = dat[2] | dat[3] << 8, rpm = raw * 0.25.
 F_N_ENG (byte 0 bit 1) is treated conservatively as an engine-speed fault flag; if it is set,
 the sample is invalid. Whether EMS11 is actually present on the comma harness bus must be
-checked on the real car (`svx_rpm.py scan`). Nothing here sends anything.
+checked on the real car (the app shows "no EMS11 frame" if it is absent). Nothing here sends anything.
 """
 from dataclasses import dataclass
 

@@ -395,6 +395,17 @@ Check storage use for recording and network use, heat, and privacy before enabli
 
 Experimental DM switches to standard monitoring for 20 seconds only when moving traffic first appears after an absence. Additional vehicles do not extend it; experimental monitoring then resumes, with no empty-road bonus while traffic remains.
 
+### Device toggle: SVX Live RPM to Phone (optional, off by default)
+
+This is not a Carrot Web catalog setting; it is on the device screen under **Settings → Toggles**: "SVX Live RPM to Phone" on the C3/C3X large UI (Korean: "SVX 실시간 RPM 폰 전송") and "svx live rpm to phone" on the C4 UI. Parameters: `SvxLiveEnabled` (default `0`) and `SvxLivePort` (default `47816`).
+
+- When on, the read-only process `svx_lived` listens on TCP port `47816` **only while the device is onroad (car powered on, `started`)**. The car does not have to move; it also works parked with the ignition on. It does not run offroad.
+- In the SVX virtual-exhaust phone app (0.3.0 or newer), save the comma IP and port and press Live: the app connects and receives the engine RPM (EMS11; supported only for `KIA_SELTOS` non-CAN-FD on bus 0). No key or command is needed.
+- Only phones with a private LAN (10/8, 172.16/12, 192.168/16) or tailnet (100.64/10) address are accepted. **There is no key, so this is not authentication**: anyone on that network can read the RPM. Nothing the phone sends can control anything.
+- The port normally never needs changing and has no on-screen editor.
+- Turning it off closes the connection and ends the process within about a second. Steering, acceleration, braking and CAN transmission are unchanged.
+- Details and limitations: `openpilot/selfdrive/svx_live/README_KO.md` (Korean) and `PROTOCOL.md`.
+
 ## Signal Assistance Mode (Trial)
 
 `SignalAssistMode` defaults to `0`. Mode `0` disables auxiliary signals; `1` enables recognition, display, alerts and the stopped-red departure veto; `2` also enables moving-red preparation.
