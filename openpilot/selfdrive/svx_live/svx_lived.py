@@ -21,6 +21,8 @@ import threading
 import time
 
 from . import wire as W
+from .cereal_source import KEEP_PER_TICK, MAX_DRAIN_PER_TICK
+from .diagnostics import CENSUS_MAX_FRAMES_PER_TICK, LiveDiagnostics, error_category
 from .manager_policy import DEFAULT_PORT, ENABLED_PARAM, PORT_PARAM, parse_port
 from .netpolicy import AddressPolicy
 from .profile import PROFILES, selection_error
@@ -33,7 +35,7 @@ ENABLED_RECHECK_S = 0.5        # toggle OFF -> sessions closed within ~0.5 s (ma
 SELECTION_RECHECK_S = 2.0
 BIND_RETRY_S = 5.0
 IDLE_S = 0.5
-ERROR_LOG_PERIOD_S = 10.0
+ERROR_LOG_PERIOD_S = 10.0     # also the minimum interval between "can subscriber unavailable" lines
 
 
 def clock_boottime_ns() -> int:
@@ -46,7 +48,8 @@ def _stderr_log(msg: str) -> None:
 
 class LiveDaemon:
   def __init__(self, server: LiveServer | None, enabled_fn, selection_reader, source_factory,
-               clock_ns=clock_boottime_ns, mono=time.monotonic, logger=_stderr_log, sleep=time.sleep):
+               clock_ns=clock_boottime_ns, mono=time.monotonic, logger=_stderr_log, sleep=time.sleep,
+               diag: LiveDiagnostics | None = None):
     self.server = server
     self.enabled_fn = enabled_fn
     self.sel_reader = selection_reader
@@ -67,6 +70,31 @@ class LiveDaemon:
     self.frames = 0
     self.errors = 0
     self._last_error_log: float | None = None
+    self._last_subscriber_log: float | None = None
+    self.diag = diag  # bounded svxLiveDiag summaries; emits nothing until the toggle has been seen ON
+
+  def _diag_failed(self) -> None:
+    try:
+      self.diag.w["diag_errors"] += 1
+    except Exception:
+      pass
+
+  def _diag_start(self, now: float) -> None:
+    try:
+      self.diag.start(now, {
+        "profile": self.profile.name, "address": self.profile.address, "bus": sorted(self.profile.allowed_buses),
+        "protocol": W.VERSION, "tick_ms": round(TICK_S * 1000), "stale_ms": self.state.stale_ms,
+        "max_drain": MAX_DRAIN_PER_TICK, "keep": KEEP_PER_TICK, "census_max_frames": CENSUS_MAX_FRAMES_PER_TICK,
+        "summary_s": self.diag.period_s, "port_valid": self.server is not None,
+      })
+    except Exception:
+      self._diag_failed()
+
+  def _diag_snapshot(self) -> dict:
+    srv = self.server
+    return {"state_rejects": self.state.rejects, "server": srv.stats if srv is not None else {},
+            "sessions": len(srv.sessions) if srv is not None else 0, "listening": bool(srv is not None and srv.listening),
+            "tick_errors": self.errors}
 
   def log(self, msg: str) -> None:
     try:
@@ -118,7 +146,14 @@ class LiveDaemon:
         self.src = self.source_factory(self.profile)  # the `can` subscription exists only for the supported car
       except Exception as e:
         self.src = None
-        self.log(f"can subscriber unavailable ({type(e).__name__}); reporting no frames")
+        if self._last_subscriber_log is None or now - self._last_subscriber_log >= ERROR_LOG_PERIOD_S:
+          self._last_subscriber_log = now  # retried every SELECTION_RECHECK_S, logged at most every 10 s
+          self.log(f"can subscriber unavailable ({error_category(e)}); reporting no frames")
+        if self.diag is not None:
+          try:
+            self.diag.subscriber_error(e)
+          except Exception:
+            self._diag_failed()
 
   def step(self) -> bool:
     """One bounded iteration that takes at least TICK_S of wall-clock time: one selector round with the
@@ -133,7 +168,7 @@ class LiveDaemon:
       self.errors += 1
       if self._last_error_log is None or now - self._last_error_log >= ERROR_LOG_PERIOD_S:
         self._last_error_log = now
-        self.log(f"tick failed ({type(e).__name__}: {e}); {self.errors} total, continuing")
+        self.log(f"tick failed ({error_category(e)}); {self.errors} total, continuing")  # category only, never the message
     rest = deadline - self.mono()
     if ok and rest > 0:
       self.sleep(rest)
@@ -145,29 +180,68 @@ class LiveDaemon:
       if not self._enabled():
         self.log("disabled: closing sessions")
         return False
+      if self.diag is not None and not self.diag.active:
+        self._diag_start(now)
     if self.server is None:
       self.sleep(IDLE_S)  # no valid port: idle until disabled or stopped
       return True
     if not self.server.listening and now >= self._next_bind:
       self._next_bind = now + BIND_RETRY_S
       self.server.open()
+    diag = self.diag if self.diag is not None and self.diag.active else None
+    if diag is not None:
+      try:
+        diag.tick(now, TICK_S)
+      except Exception:
+        self._diag_failed()
     self._check_selection(now)
     if self.sel_error is None and self.src is not None:
+      t_poll = self.mono() if diag is not None else 0.0
       try:
         frame = self.src.poll()
       except Exception:
         frame = (INVALID, "source_error")
+        if diag is not None:
+          try:
+            diag.source_error()
+          except Exception:
+            self._diag_failed()
+      accepted = False
       if frame is not None:
         if frame[0] == INVALID:
           self.state.invalidate(frame[1])  # explicit bad newest evidence -> INVALID now, never older data
         elif self.state.ingest(frame[0], frame[1], self.clock_ns()):
           self.frames += 1
+          accepted = True
+      if diag is not None:
+        self._diag_poll(diag, now, t_poll, frame, accepted)
     if self.state.epoch != self._epoch:
       self.server.end_sessions(W.BYE_CAR_CHANGED)  # counter wrapped: sessions must never see it regress
       self._epoch = self.state.epoch
-    self.server.publish(telemetry_fields(self.sel_error, self.state, self.clock_ns()))
+    fields = telemetry_fields(self.sel_error, self.state, self.clock_ns())
+    self.server.publish(fields)
+    if diag is not None:
+      try:
+        diag.observe(now, fields["status"], self.sel_error, self.src is not None)
+        if diag.due(now):
+          diag.summary(now, self._diag_snapshot())
+      except Exception:
+        self._diag_failed()
     self.server.poll(max(0.0, deadline - self.mono()))
     return True
+
+  def _diag_poll(self, diag: LiveDiagnostics, now: float, t_poll: float, frame, accepted: bool) -> None:
+    try:
+      diag.poll_timing(self.mono() - t_poll)
+      newest = diag.source_stats.newest_event_ns
+      if newest is not None:
+        diag.event_age(self.clock_ns() - newest)
+      if frame is not None and frame[0] != INVALID:
+        diag.matched(now)
+      if accepted:
+        diag.accepted(now, self.state.last_sample.reason)
+    except Exception:
+      self._diag_failed()
 
   def run(self, stop: threading.Event) -> int:
     try:
@@ -179,6 +253,12 @@ class LiveDaemon:
     return 0
 
   def close(self) -> None:
+    if self.diag is not None and self.diag.active:
+      try:
+        self.diag.summary(self.mono(), self._diag_snapshot(), kind="stop")  # pre-close snapshot, once
+      except Exception:
+        self._diag_failed()
+      self.diag.active = False
     if self.server is not None:
       self.server.close(W.BYE_STOPPING)
     self._close_source()
@@ -204,15 +284,17 @@ def main() -> int:
 
   try:
     from openpilot.common.swaglog import cloudlog
-    logger = cloudlog.info
+    logger, emit = cloudlog.info, cloudlog.event
   except Exception:
-    logger = _stderr_log
+    logger, emit = _stderr_log, None
 
   lower_priority()
   stop = threading.Event()
   install_stop_handlers(stop)
 
   params = Params()
+  # automatic while enabled, persisted by logmessaged; GitCommit is read once, only when the toggle is seen ON
+  diag = LiveDiagnostics(emit, revision_fn=lambda: params.get("GitCommit")) if emit is not None else None
   try:
     port = parse_port(params.get(PORT_PARAM))
   except Exception:
@@ -223,7 +305,8 @@ def main() -> int:
   else:
     server = LiveServer(port, AddressPolicy(allow_loopback=False), host="0.0.0.0", logger=logger)
   daemon = LiveDaemon(server, lambda: params.get_bool(ENABLED_PARAM), ParamsCarSelection(),
-                      lambda prof: CerealCanSource(prof.address, 0), logger=logger)
+                      lambda prof: CerealCanSource(prof.address, 0, stats=diag.source_stats if diag is not None else None),
+                      logger=logger, diag=diag)
   return daemon.run(stop)
 
 

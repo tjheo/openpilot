@@ -98,7 +98,8 @@ class NoSocket(socket.socket):
 socket.socket = NoSocket
 threading.Thread.start = lambda self: (_ for _ in ()).throw(AssertionError("thread at import"))
 mods = ["openpilot.selfdrive.svx_live." + m for m in
-        ("svx_lived", "server", "wire", "netpolicy", "manager_policy", "rpm_state", "ems11", "profile", "cereal_source")]
+        ("svx_lived", "server", "wire", "netpolicy", "manager_policy", "rpm_state", "ems11", "profile", "cereal_source",
+         "diagnostics")]
 for m in mods:
   importlib.import_module(m)
 bad = [m for m in sys.modules if m.split(".")[0] in ("msgq", "capnp", "zmq") or m.startswith(("openpilot.common.params",
@@ -112,7 +113,7 @@ def test_imports_are_inert_like_manager_prepare():
   """PythonProcess.prepare() imports the module even while the toggle is OFF: nothing may happen at import."""
   out = subprocess.run([sys.executable, "-I", "-c", INERT_CHECK, REPO], capture_output=True, text=True, timeout=60,
                        env={"PATH": os.environ.get("PATH", "")})
-  assert out.returncode == 0 and "INERT_OK 9" in out.stdout, out.stderr
+  assert out.returncode == 0 and "INERT_OK 10" in out.stdout, out.stderr
 
 
 # ---- raylib settings layouts (C3/C3X big UI and C4 mici UI) with stubbed widget/runtime modules ----

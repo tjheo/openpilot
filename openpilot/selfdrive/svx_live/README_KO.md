@@ -78,6 +78,59 @@
 * 재사용한 부분: EMS11 해석, 차량 프로파일, 신선도 판정, `can` 구독 코드, 그리고 해당 테스트들입니다. 모두 이 폴더로 옮겼습니다.
 * 0.2.2 이하 앱이 쓰던 SVX1 UDP 형식은 0.3.0 앱이 더 이상 받지 않습니다.
 
+## 진단 로그 (NO_FRAME 원인 확인용, 자동)
+토글이 켜져 있으면 `svx_lived`가 **자동으로** 짧은 진단 요약을 기존 cloudlog(swaglog)에 남깁니다. 따로 켤 스위치·명령·파라미터는 없습니다.
+토글이 꺼져 있으면 프로그램 자체가 실행되지 않으므로 진단도, 구독도, 포트도 없습니다.
+
+* **저장 위치 (코드로 확인):** `svx_lived` → `cloudlog.event("svxLiveDiag", ...)` → `/tmp/logmessage` IPC → `logmessaged`.
+  * 장치 파일: `Paths.swaglog_root()` = **`/data/log/swaglog.<10자리 번호>`** (PC는 `~/.comma/log/`). INFO 이상만 기록합니다.
+  * 파일은 60초마다 또는 256 KiB마다 새 번호로 바뀌고, 최대 2500개를 넘으면 **가장 오래된 파일부터 지워집니다.** 영구 보관이 아닙니다. 주행 후 너무 늦지 않게 가져오세요.
+  * 같은 줄이 `logMessage`로도 발행되어 loggerd가 그 주행 구간의 `rlog`(`/data/media/0/realdata/<route>--<seg>/`)에 넣습니다. qlog에는 들어가지 않습니다. rlog도 저장 공간이 부족하면 deleter가 지웁니다. 업로드 동작은 바꾸지 않았습니다.
+  * 파일 안에서는 swaglog가 키 뒤에 형식을 붙입니다: `kind$s`, `ticks$i`, `t$f`, `listening$b`, 목록은 `$a`.
+* **무엇을 남기나:**
+  * `start` (시작할 때 한 번): 프로파일, 주소 790(0x316), 버스 `[0]`, 프로토콜 버전, 50Hz 주기, 300ms 신선도, 드레인 512 / 파싱 8, 검증된 `GitCommit`(40자리 hex가 아니면 `unknown`).
+  * `summary` (시작 3초 뒤, 그다음 10초마다): 아래 카운터. `stop`: 종료 직전(서버·구독을 닫기 **전**) 마지막 요약.
+  * `transition`: 표시 상태·차량 선택·구독 여부가 바뀔 때. 1초 간격, 10초 창마다 최대 4줄. 나머지는 개수만 셉니다.
+  * 이벤트 내용(payload)은 4096바이트(UTF-8 JSON) 이하입니다. swaglog가 붙이는 줄 전체(장치 context 등 envelope)는 이 한도에 포함되지 않습니다. 1시간 주행이면 요약 약 360줄, 상태가 계속 바뀌는 최악의 경우 transition이 최대 1440줄 더해집니다.
+* **남기지 않는 것:** CAN 데이터 바이트, RPM 값, 폰 IP 등 접속 주소, VIN·위치·토큰, 예외 메시지와 예외 이름(정해진 분류 `os`/`value`/`runtime`/… 만).
+  * 같은 이유로 기존 텍스트 로그 `tick failed`, `can subscriber unavailable`도 분류만 남기도록 바꿨고, 후자는 최대 10초에 한 줄입니다(재시도는 그대로 2초).
+  * 단, 기존 서버 로그(`session ... from <IP>`, 비허용 주소 거부)는 이번 변경 범위가 아니어서 그대로 접속 IP를 남깁니다.
+
+### 다음 주행에서 쓰는 순서
+1. 이 변경이 병합된 뒤, **주차 상태에서** 평소처럼 업데이트(git pull)하고 재시작(재부팅)합니다. 빌드도 평소 과정 그대로입니다.
+2. 기존 토글 "svx live rpm to phone"은 켜 둔 그대로 둡니다. 새 설정은 없습니다. 폰 앱(0.3.0)도 바꿀 필요 없습니다.
+3. 평소처럼 시동을 켜고 주행합니다. 원하면 앱에서 [실시간]을 눌러도 됩니다(진단은 앱 연결과 무관하게 남습니다). 주행 중에 조작할 것은 없습니다.
+4. 주행 후 (주차 상태에서) 로그를 가져옵니다. 예: `grep -h svxLiveDiag /data/log/swaglog.* > /tmp/svx_diag.txt` 후 그 파일만 복사.
+   * `svxLiveDiag` 줄만 골라도 각 줄의 swaglog envelope(`ctx`: 장치 ID, 브랜치 등, `host` 등)는 그대로 남습니다. **공개용으로 안전하지 않습니다.** 비공개로만 전달하거나, 공유 전에 `msg` 부분만 남기고 envelope를 지우세요.
+
+### 해석 가이드 (`summary`의 `can` 안 값은 그 10초 창 기준)
+아래는 **가설과 증거의 경계**입니다. 각 값은 이 프로세스가 본 것만 말하며, 원인을 단정하지 않습니다.
+| 보이는 값 | 뜻 |
+|---|---|
+| `svxLiveDiag` 줄이 하나도 없음 | 이 코드가 실행됐는지 알 수 없음. 가능성: 업데이트·재시작 안 됨, 토글 꺼짐, onroad 아님, 로거/logmessaged 문제, 이미 회전·삭제됨 |
+| `sel`이 `ok`가 아님 | 차량 선택 단계에서 멈춤 (`car_params_unavailable`/`unsupported_*`) |
+| `subscriber_errors` > 0, `src: false` | `can` 구독 생성 실패 (`subscriber_error_types`에 분류) |
+| `can.polls` > 0 인데 `drained` = 0 (`empty_polls` = `polls`) | 이 프로세스의 구독자가 `can` 메시지를 하나도 받지 못함. 차량·하네스·pandad·msgq 중 어디가 원인인지는 이것만으로 구분할 수 없음 |
+| `read_errors` > 0 | 소켓 읽기 실패 (`source_errors`, 상태 INVALID) |
+| `parse_errors` > 0 / `events_invalid` > 0 | 해석 불가 메시지 / pandad가 `valid=false`로 보낸 이벤트 |
+| `events_valid` > 0, `rx_frames`에 버스별 프레임 있음, `rx_target` 비어 있음, `tx_target` 0 | 보관·파싱·집계된 표본(아래 한계 참고) 안에 0x316이 없었음. 차에 EMS11이 물리적으로 없다는 결론은 아님 |
+| `rx_target`에 `"0"`이 아닌 버스만 있음 | 표본에서 주소 0x316 프레임이 다른 버스로 보였음(같은 주소라고 EMS11 내용이 확인된 것은 아님). **개수만 셀 뿐 받아들이지 않습니다.** 버스 변경은 별도 검증 후 따로 결정할 일입니다 |
+| `tx_target`만 있음 | 송신 에코(src ≥ 128)에만 있음 |
+| `rx_target."0"` > 0, `matches` > 0, `accepted` = 0 | 프레임은 맞지만 거부됨: `state_rejects`(`too_old`/`future`/`out_of_order`/`len`), `event_age_ms` 확인 |
+| `accepted` > 0, `sample_reasons` | 정상 수신. `ok`/`engine_stopped`/`sna`/`fault`/`implausible` 분포 |
+| `drain_saturated` > 0, `drain_discarded`·`late_ticks`·`tick_gap_ms.max` 큼 | 큐가 밀렸고 틱이 늦었음. 스케줄링(nice 19) 지연이 한 가설 |
+| `status_ticks` | 그 창에서 앱에 보낸 상태별 틱 수 (`no_frame`, `ok`, `stale`, …) |
+| `sessions`, `server` | 앱 연결 수와 서버 카운터 변화 (주소는 없음) |
+
+### 진단의 한계
+* 프레임 집계는 **실제로 파싱한 메시지만** 셉니다: 틱마다 꺼낸 최대 512개 중 최신 8개(원래 RPM 경로가 파싱하는 것). 나머지는 내용을 모르는 채 버려지고 `drain_discarded`로만 셉니다. 정상(100Hz `can`, 50Hz 틱)이면 틱당 1~2개라 전부 파싱됩니다. 한 틱에 최대 2048 프레임까지만 세고 넘으면 `census_skipped_frames`.
+* `rx_target`이 비어 있어도 "차에 EMS11이 없다"를 증명하지 못합니다. 이 프로세스가 보관·파싱·집계한 표본에 없었다는 뜻일 뿐입니다(하네스 위치, 판다 필터, 상위 처리, 표본 밖 메시지 모두 가능).
+* `can` 메시지가 0개여도 차량·하네스 문제인지 장치 소프트웨어 문제인지 구분하지 못합니다. 이 구독자가 받지 못했다는 사실만 남습니다.
+* 진단 줄이 없는 것도 증거가 아닙니다(로거 실패, 회전·삭제, 미실행 모두 가능). `emit_errors`는 기록된 다음 줄에만 나타납니다.
+* 시간 값 `t`는 이 프로세스 시작 기준 monotonic 초입니다. 장치 시계가 주행 중 바뀌어도 영향이 없지만, swaglog `created`(벽시계)는 바뀔 수 있습니다.
+* 집계 비용: 개발 서버(x86)에서 합성 이벤트(이벤트당 151프레임, 틱당 2개)로 틱당 약 0.43ms 추가(20ms 주기 대비). **장치(ARM)에서는 측정하지 않았습니다.**
+* 로그는 회전·삭제되므로 오래 보관되지 않습니다.
+
 ## 한계
 * 실제 콤마·차량·폰에서 실행해 보지 않았습니다 (`VERIFICATION.md`). EMS11의 존재, 버스, 주기, 지연은 실차 확인이 필요합니다.
 * 이 서버에는 msgq·raylib가 빌드되어 있지 않습니다. 그래서 다음은 실행하지 못했습니다:

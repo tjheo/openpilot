@@ -64,6 +64,31 @@ over loopback TCP: handshake, FRESH 3200 rpm for >2.5 s without rate limiting, t
 * `cereal/services.py` `can` 100 Hz; pandad stamps `logMonoTime = nanos_since_boot()` (CLOCK_BOOTTIME).
 * `opendbc/car/hyundai/values.py` `KIA_SELTOS` non-CAN-FD platform, `Bus.pt` → bus 0; `hyundai_kia_generic.dbc` EMS11.
 
+## Diagnostics change (svxLiveDiag, 2026-10-24)
+Base: tjheo/openpilot `carrot-wip` f63ab7cefb7fa39bd1c71802f512cb704569d38b (contains PR #2 merge a975560bdb; the deployed
+`svx_lived.py`/`cereal_source.py` were byte-identical to this base). Development host only; **not run on a comma device or
+vehicle.** Adds `diagnostics.py` (stdlib only: `json`) and hooks in `svx_lived.py`/`cereal_source.py`; the RPM path,
+512/8 drain bound, freshness, 50 Hz cadence, NO_FRAME semantics, protocol and app are unchanged. New reads: `GitCommit`
+(once, only after the toggle is seen ON). No new process, param, publisher or socket.
+
+```sh
+<python 3.12.15 venv: pytest 9.1.1, pycapnp 2.2.4, numpy>/python -m pytest -q -W error tests   # 246 passed
+ruff check openpilot/selfdrive/svx_live   # ruff 0.17.2: All checks passed!
+```
+`test_svx_diagnostics.py` (21): disabled → no record/param read/subscription; start + summary cadence (3 s, then 10 s)
+and stop; true no-event (empty polls); events without target; target on other bus / TX echo counted but never accepted;
+match/accept/`too_old` accounting; drain saturation and `drain_discarded`; subscriber / read / parse / invalid-event
+separation; census budget counts actually scanned frames across events; census never changes `poll()` results
+(randomized real capnp); telemetry and freshness byte-identical with and without diagnostics over 1200 ticks;
+transition logs rate-limited under 50 Hz flapping; logger failure and broken diagnostics hooks never change the daemon
+or skip invalidation; bounded keys/counters/floats/UTF-8 bytes and no secret/exception text at saturation; no
+`error`/`debug` key (would change the cloudlog level); commit validation; reconnect flood does not add records;
+snapshot against the real `LiveServer`; existing text logs carry exception categories only, subscriber log ≤ 1 per 10 s.
+Audit/integration tests now also allow `json`, the `GitCommit` read and the new module in the inert-import check.
+
+Payload bound only: the 4096-byte limit covers the event payload, not the swaglog envelope (`ctx` device context), so
+extracted lines remain private. Not verified: device CPU cost (x86 synthetic: ~0.43 ms/tick extra for 2 events × 151 frames), real msgq, real drive.
+
 ## Not verified
 * Any run on comma hardware; real msgq subscription; real raylib rendering of the toggles; full scons build.
 * EMS11 presence, bus, rate and latency on a real Seltos; phone Wi-Fi/hotspot/tailnet behaviour; Galaxy S25 Ultra

@@ -48,7 +48,9 @@ _UNPARSEABLE = _Unparseable()
 
 
 class CerealCanSource:
-  def __init__(self, address: int, bus: int):
+  stats = None  # optional diagnostics.SourceStats; None -> exactly the plain RPM path
+
+  def __init__(self, address: int, bus: int, stats=None):
     from openpilot.cereal import messaging
     self._log_from_bytes = messaging.log_from_bytes
     self._sock = messaging.sub_sock("can", conflate=False)
@@ -56,13 +58,27 @@ class CerealCanSource:
     self.bus = bus
     self.rejects: dict = {}
     self.drain_caps = 0
+    self.stats = stats
+
+  def _stat(self, name: str, *args) -> None:
+    """Diagnostics hook; a broken diagnostics object never changes what poll() returns or raises."""
+    if self.stats is not None:
+      try:
+        getattr(self.stats, name)(*args)
+      except Exception:
+        pass
 
   def _drain(self):
     if self._sock is None:
       return []
-    raw, n = drain_bounded(self._sock)
+    try:
+      raw, n = drain_bounded(self._sock)
+    except Exception as e:
+      self._stat("on_read_error", e)
+      raise  # unchanged: the daemon reports source_error as INVALID
     if n >= MAX_DRAIN_PER_TICK:
       self.drain_caps += 1
+    self._stat("on_drain", n, len(raw), n >= MAX_DRAIN_PER_TICK)
     return raw
 
   def poll(self):
@@ -75,12 +91,21 @@ class CerealCanSource:
         events.append(self._log_from_bytes(m))
       except Exception:
         self.rejects["parse"] = self.rejects.get("parse", 0) + 1
+        self._stat("on_parse_error")
         events.append(_UNPARSEABLE)
+    if self.stats is not None:
+      try:
+        self.stats.census(events, self.address, skip=_UNPARSEABLE)  # count only, never feeds acceptance
+      except Exception:
+        self._stat("on_census_error")
     try:
-      return latest_frame(events, self.address, self.bus, self.rejects)
+      result = latest_frame(events, self.address, self.bus, self.rejects)
     except Exception:
       self.rejects["parse"] = self.rejects.get("parse", 0) + 1
+      self._stat("on_scan_error")
       return INVALID, "parse"
+    self._stat("on_result", result)
+    return result
 
   def discard(self) -> None:
     self._drain()
