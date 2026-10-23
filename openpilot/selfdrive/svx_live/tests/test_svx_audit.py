@@ -12,7 +12,7 @@ PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO = os.path.abspath(os.path.join(PKG, "..", "..", ".."))
 SOURCES = [os.path.join(PKG, f) for f in sorted(os.listdir(PKG)) if f.endswith(".py")]
 
-STDLIB = {"__future__", "collections", "dataclasses", "errno", "fcntl", "ipaddress", "os", "selectors", "signal", "socket",
+STDLIB = {"__future__", "collections", "dataclasses", "errno", "fcntl", "ipaddress", "json", "os", "selectors", "signal", "socket",
           "struct", "sys", "termios", "threading", "time", "zlib"}
 OPENPILOT_ALLOWED = {"openpilot.cereal", "openpilot.cereal.messaging", "openpilot.common.params", "openpilot.common.swaglog"}
 FORBIDDEN = [r"\bsendcan\b", r"pub_sock", r"PubMaster", r"\bPanda\b", r"panda\.", r"usb1?\b", r"AF_CAN", r"SOCK_RAW", r"SOCK_DGRAM",
@@ -62,7 +62,7 @@ def test_only_subscribes_to_can_and_reads_known_params():
   srcs = "\n".join(code_only(p)[1] for p in SOURCES)
   assert re.findall(r"sub_sock\(([^,)]*)", srcs) == ["'can'"]
   gets = set(re.findall(r"params\.get(?:_bool)?\(([^)]*)\)", srcs))
-  assert gets == {"'CarParams'", "PORT_PARAM", "ENABLED_PARAM"}, gets
+  assert gets == {"'CarParams'", "'GitCommit'", "PORT_PARAM", "ENABLED_PARAM"}, gets
   assert "bind((self.host, self.port))" in srcs and srcs.count(".bind(") == 1  # one listener, nothing else
 
 
