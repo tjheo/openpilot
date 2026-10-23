@@ -5,6 +5,7 @@ from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMulti
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.svx_live.manager_policy import ENABLED_PARAM as SVX_LIVE_PARAM, params_has_key
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
@@ -22,7 +23,7 @@ class TogglesLayoutMici(NavScroller):
     record_mic = BigParamControl("record & upload mic audio", "RecordAudio", toggle_callback=restart_needed_callback)
     enable_openpilot = BigParamControl("enable openpilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback)
 
-    self._scroller.add_widgets([
+    widgets = [
       self._personality_toggle,
       self._experimental_btn,
       is_metric_toggle,
@@ -31,7 +32,12 @@ class TogglesLayoutMici(NavScroller):
       record_front,
       record_mic,
       enable_openpilot,
-    ])
+    ]
+    # SVX Live RPM telemetry for the phone app; hidden on a params build without the key
+    svx_live_toggle = BigParamControl("svx live rpm to phone", SVX_LIVE_PARAM) if params_has_key(ui_state.params, SVX_LIVE_PARAM) else None
+    if svx_live_toggle is not None:
+      widgets.append(svx_live_toggle)
+    self._scroller.add_widgets(widgets)
 
     # Toggle lists
     self._refresh_toggles = (
@@ -42,7 +48,7 @@ class TogglesLayoutMici(NavScroller):
       ("RecordFront", record_front),
       ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),
-    )
+    ) + (((SVX_LIVE_PARAM, svx_live_toggle),) if svx_live_toggle is not None else ())
 
     enable_openpilot.set_enabled(lambda: not ui_state.engaged)
     record_front.set_enabled(False if ui_state.params.get_bool("RecordFrontLock") else (lambda: not ui_state.engaged))

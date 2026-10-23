@@ -6,6 +6,7 @@ from openpilot.cereal import car
 from openpilot.common.params import Params
 from openpilot.system.hardware import PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
+from openpilot.selfdrive.svx_live.manager_policy import svx_live_should_run
 
 try:
   BODYTELEOP_AVAILABLE = importlib.util.find_spec("openpilot.tools.bodyteleop.web") is not None
@@ -168,6 +169,8 @@ procs = [
   #PythonProcess("uploader", "openpilot.system.loggerd.uploader", enable_connect),
   PythonProcess("statsd", "openpilot.system.statsd", always_run),
   PythonProcess("feedbackd", "openpilot.selfdrive.ui.feedback.feedbackd", only_onroad),
+  # Optional read-only RPM telemetry for the SVX phone app: onroad AND SvxLiveEnabled only (default off).
+  PythonProcess("svx_lived", "openpilot.selfdrive.svx_live.svx_lived", svx_live_should_run),
 
   # debug procs
   NativeProcess("bridge", "openpilot/cereal/messaging", ["./bridge"], notcar),

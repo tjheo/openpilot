@@ -1,4 +1,4 @@
-"""Read-only adapters to the running openpilot stack. Imported lazily, only on the comma device.
+"""Read-only adapters to the running openpilot stack. openpilot modules are imported only inside the constructors.
 
 * CerealCanSource: a plain msgq SUBSCRIBER to the existing `can` service. It never creates a
   publisher, never opens Panda/USB/SPI/socketcan, and never touches sendcan.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections import deque
 
-from .core import latest_frame
+from .rpm_state import INVALID, latest_frame
 from .profile import CarSelection
 
 MAX_DRAIN_PER_TICK = 512  # hard cap on messages dequeued per tick (msgq itself is a bounded ring)
@@ -38,6 +38,15 @@ def drain_bounded(sock, max_drain: int = MAX_DRAIN_PER_TICK, keep: int = KEEP_PE
   return list(kept), n
 
 
+class _Unparseable:
+  valid = False  # treated like an invalid event by latest_frame()
+  can = ()
+  logMonoTime = 0
+
+
+_UNPARSEABLE = _Unparseable()
+
+
 class CerealCanSource:
   def __init__(self, address: int, bus: int):
     from openpilot.cereal import messaging
@@ -57,7 +66,8 @@ class CerealCanSource:
     return raw
 
   def poll(self):
-    """Newest (logMonoTime_ns, dat) for the configured address/bus among queued messages, or None."""
+    """latest_frame() result for the queued messages: (logMonoTime_ns, dat), (INVALID, reason) or None.
+    A message that cannot be parsed is explicit bad evidence when it is the newest one."""
     raw = self._drain()
     events = []
     for m in raw:
@@ -65,25 +75,15 @@ class CerealCanSource:
         events.append(self._log_from_bytes(m))
       except Exception:
         self.rejects["parse"] = self.rejects.get("parse", 0) + 1
+        events.append(_UNPARSEABLE)
     try:
       return latest_frame(events, self.address, self.bus, self.rejects)
     except Exception:
       self.rejects["parse"] = self.rejects.get("parse", 0) + 1
-      return None
+      return INVALID, "parse"
 
   def discard(self) -> None:
     self._drain()
-
-  def iter_events(self):
-    """All queued events (bounded), for the read-only `scan` command."""
-    if self._sock is None:
-      return
-    raw, _ = drain_bounded(self._sock, keep=MAX_DRAIN_PER_TICK)
-    for m in raw:
-      try:
-        yield self._log_from_bytes(m)
-      except Exception:
-        continue
 
   def close(self) -> None:
     self._sock = None
