@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""svx_lived: optional read-only EMS11 engine-RPM telemetry for the SVX phone app (SVXL v1 over TCP).
+"""svx_lived: optional read-only engine-RPM telemetry (EMS11, or EMS_366 on cars without EMS11) for the SVX phone app (SVXL v1 over TCP).
 
 Started by the manager only while onroad AND Params SvxLiveEnabled is on (manager_policy). It then listens
 on TCP SvxLivePort (default 47816); the phone connects, does the keyless HELLO/WELCOME handshake and
@@ -82,7 +82,8 @@ class LiveDaemon:
   def _diag_start(self, now: float) -> None:
     try:
       self.diag.start(now, {
-        "profile": self.profile.name, "address": self.profile.address, "bus": sorted(self.profile.allowed_buses),
+        "profile": self.profile.name, "address": self.profile.address, "fallback_address": self.profile.fallback_address,
+        "bus": sorted(self.profile.allowed_buses),
         "protocol": W.VERSION, "tick_ms": round(TICK_S * 1000), "stale_ms": self.state.stale_ms,
         "max_drain": MAX_DRAIN_PER_TICK, "keep": KEEP_PER_TICK, "census_max_frames": CENSUS_MAX_FRAMES_PER_TICK,
         "summary_s": self.diag.period_s, "port_valid": self.server is not None,
@@ -210,7 +211,7 @@ class LiveDaemon:
       if frame is not None:
         if frame[0] == INVALID:
           self.state.invalidate(frame[1])  # explicit bad newest evidence -> INVALID now, never older data
-        elif self.state.ingest(frame[0], frame[1], self.clock_ns()):
+        elif self.state.ingest(frame[0], frame[1], self.clock_ns(), getattr(frame, "address", self.profile.address)):
           self.frames += 1
           accepted = True
       if diag is not None:
@@ -305,7 +306,8 @@ def main() -> int:
   else:
     server = LiveServer(port, AddressPolicy(allow_loopback=False), host="0.0.0.0", logger=logger)
   daemon = LiveDaemon(server, lambda: params.get_bool(ENABLED_PARAM), ParamsCarSelection(),
-                      lambda prof: CerealCanSource(prof.address, 0, stats=diag.source_stats if diag is not None else None),
+                      lambda prof: CerealCanSource(prof.address, 0, stats=diag.source_stats if diag is not None else None,
+                                                  fallback=prof.fallback_address),
                       logger=logger, diag=diag)
   return daemon.run(stop)
 

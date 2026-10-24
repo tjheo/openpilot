@@ -89,7 +89,38 @@ Audit/integration tests now also allow `json`, the `GitCommit` read and the new 
 Payload bound only: the 4096-byte limit covers the event payload, not the swaglog envelope (`ctx` device context), so
 extracted lines remain private. Not verified: device CPU cost (x86 synthetic: ~0.43 ms/tick extra for 2 events × 151 frames), real msgq, real drive.
 
+## EMS_366 fallback (2026-10-24)
+Base: tjheo/openpilot `carrot-wip` 47bc5e062be2045737b141f298e83295c3f12450. Development host only; **not run on a comma
+device or vehicle.** Cause of NO_FRAME on a Seltos: its bus 0 carries no EMS11 (0x316 absent on every bus in two
+recorded ~61 s rlogs, one driving 0–19 km/h with throttle, one parked idle). Fix: `ems366.py` decodes EMS_366 (0x366)
+`N 8|16@1+ ×0.25` (this tree's `hyundai_kia_generic.dbc`, identical in upstream commaai/opendbc
+`generator/hyundai/hyundai_can.dbc`; layout from commaai/opendbc PR #319), accepted with 7 (observed) or 8 (DBC) bytes.
+`CerealCanSource` uses it only while no EMS11 frame (or wrong-length EMS11) has been seen by that source; the decoder is
+chosen by address (`rpm_state.DECODERS`), never by length. Protocol, `rpm_raw` unit, 300 ms freshness, bus 0 only,
+TX-echo rejection, default OFF and the app (incl. its 4000 rpm cap) are unchanged.
+
+Offline evidence (private recordings, aggregates only): 0x366 and 0x162 both at ~100 Hz with constant DLC 7/8; 0x366 `N`
+agrees frame-by-frame with the TCU's separately defined `TCU_DCT13 Cluster_Engine_RPM 10|13@1+ ×0.9766` (median
+difference −0.4 rpm; with 0x162 one frame later mean |Δ| 0.43 rpm; never > 31 rpm over 12,253 pairs); `VS` byte 5 tracks
+`carState.vEgoRaw` (moving mean −0.89 km/h, integer km/h); park idle 684–724 rpm, rises 200–740 rpm within 1 s of
+throttle, falls on lift-off, stays near an idle floor while creeping 5–11 km/h (not proportional to wheel speed); no
+DBC-undefined bit varies; never 0 or > 1760 rpm. No independent ground truth (tachometer/OBD) was available; 0x162 may
+be a relay of the same EMS value, so it corroborates the layout, not the sensor. Engine-off (`N` = 0) was not observed.
+Replay of both recordings through the real `LiveDaemon`/`CerealCanSource`/`RpmState` (re-serialized capnp events, 50 Hz
+ticks): without the fallback 100% `NO_FRAME`; with it 100% `OK`, published rpm − 0x162 within ±26 rpm, frame age ≤ 22 ms.
+
+```sh
+<python 3.12.15 venv: pytest 9.1.1, pycapnp 2.2.4, numpy>/python -m pytest -q -W error tests   # 263 passed, 1 skipped
+ruff check openpilot/selfdrive/svx_live   # ruff 0.17.2: All checks passed!
+```
+The skip is `test_change_is_confined_to_narrow_integration` (a git worktree has a `.git` file, not a directory); the same
+path check was run by hand on the diff. New: `test_svx_ems366.py` (decoder, DBC layout, address-based decoder choice,
+lengths), real-capnp fallback/latch tests in `test_svx_cereal.py`, a daemon end-to-end EMS_366 test. Against the old
+source the new/changed tests fail (11 failures). The diagnostics census still counts 0x316 only.
+
 ## Not verified
+* EMS_366 on a live car through real msgq (recorded-CAN replay only); engine-off/ISG and ignition transitions on 0x366;
+  other Seltos markets, engines or transmissions.
 * Any run on comma hardware; real msgq subscription; real raylib rendering of the toggles; full scons build.
 * EMS11 presence, bus, rate and latency on a real Seltos; phone Wi-Fi/hotspot/tailnet behaviour; Galaxy S25 Ultra
   (Android 16).

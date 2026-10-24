@@ -1,6 +1,6 @@
 """Explicit vehicle profiles. Only profiles listed here are accepted; anything else fails closed.
 
-Why raw EMS11 instead of carState.engineRpm: carState has an engineRpm field, but the Hyundai/Kia
+Why raw CAN instead of carState.engineRpm: carState has an engineRpm field, but the Hyundai/Kia
 carstate in this tree never sets it, so it would always read 0.
 
 kia_seltos_2021_ems11:
@@ -9,7 +9,10 @@ kia_seltos_2021_ems11:
   * The CarParams written by card must report brand "hyundai", carFingerprint "KIA_SELTOS" and
     no HyundaiFlags.CANFD bit. Any other selection, including CAN-FD variants, is rejected.
   * Only bus 0 is accepted. TX echoes (src >= 128) never match. That EMS11 is really present on
-    this bus for a given car/year/engine is NOT known from the DBC; the app then shows STATUS_NO_FRAME.
+    this bus for a given car/year/engine is NOT known from the DBC.
+  * Fallback EMS_366 (0x366) `N`, used only while no EMS11 frame has been seen (cereal_source). A recorded
+    Seltos has no 0x316 on any bus but 0x366 at 100 Hz on bus 0, whose N matches the TCU's separately defined
+    TCU_DCT13 Cluster_Engine_RPM (0x162). If neither message is present the app shows STATUS_NO_FRAME.
 """
 from __future__ import annotations
 
@@ -25,10 +28,11 @@ class Profile:
   fingerprint: str
   address: int
   allowed_buses: frozenset
+  fallback_address: int | None = None
 
 
 PROFILES = {
-  "kia_seltos_2021_ems11": Profile("kia_seltos_2021_ems11", "hyundai", "KIA_SELTOS", 0x316, frozenset({0})),
+  "kia_seltos_2021_ems11": Profile("kia_seltos_2021_ems11", "hyundai", "KIA_SELTOS", 0x316, frozenset({0}), 0x366),
 }
 
 
