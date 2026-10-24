@@ -56,16 +56,17 @@ the connection is then closed. All 32-bit fields are unsigned.
 Unknown types, reasons, statuses or flag bits and non-zero reserved fields are errors.
 
 ### RPM frame
-* `rpm_raw`: EMS11 `N` raw value (0.25 rpm/bit). The app shows/uses **real** rpm = raw × 0.25; any sound
+* `rpm_raw`: engine-speed `N` raw value (0.25 rpm/bit) from EMS11 (0x316) or, on cars without EMS11, EMS_366 (0x366);
+  both use the same unit, so the meaning is unchanged. The app shows/uses **real** rpm = raw × 0.25; any sound
   mapping (e.g. "real 4,000 rpm sounds like the former 6,500 rpm top") is app-internal.
-* `frame_counter`: +1 only for each newly accepted EMS11 frame. Within a session it never decreases; equal
+* `frame_counter`: +1 only for each newly accepted RPM frame. Within a session it never decreases; equal
   counter ⇒ equal `rpm_raw` (heartbeat).
-* `frame_age_ms`: comma-side age of the newest EMS11 frame at send time (now − `logMonoTime`, CLOCK_BOOTTIME),
+* `frame_age_ms`: comma-side age of the newest RPM frame at send time (now − `logMonoTime`, CLOCK_BOOTTIME),
   saturating; 65535 = none/unknown.
 * `flags`: `0x01 RPM_VALID`, `0x02 FRAME_SEEN`.
 * `status` (exactly one): 0 OK, 1 WAIT_CAR (CarParams not available yet), 2 UNSUPPORTED_CAR, 3 UNSUPPORTED_CANFD,
-  4 NO_FRAME (supported car, no EMS11 on bus 0 yet), 5 STALE (>300 ms), 6 ENGINE_OFF (rpm 0), 7 INVALID
-  (EMS11 fault/SNA/implausible, or the newest CAN evidence was invalid/rejected).
+  4 NO_FRAME (supported car, neither EMS11 nor EMS_366 on bus 0 yet), 5 STALE (>300 ms), 6 ENGINE_OFF (rpm 0), 7 INVALID
+  (EMS11 fault, SNA/implausible, or the newest CAN evidence was invalid/rejected).
 * Rule (validated by both sides): `RPM_VALID` ⇔ `status == OK`, and OK also requires `FRAME_SEEN` and
   `frame_counter ≥ 1`.
 * Sent on every new frame or status change (≤ 50 Hz per session) and otherwise as a heartbeat every 200 ms.

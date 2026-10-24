@@ -1,14 +1,16 @@
-"""Pure, hardware-free logic: EMS11 extraction from `can` events, freshness and the reported status.
+"""Pure, hardware-free logic: engine-speed frame extraction from `can` events, freshness and the reported status.
 
+The RPM message is EMS11 (0x316) or, on cars without it, EMS_366 (0x366); see cereal_source for the choice.
 Freshness invariant: `frame_counter` and the frame time advance ONLY in RpmState.ingest() for an
-accepted EMS11 frame. Building/sending a telemetry frame (heartbeat or not) never makes data fresher.
+accepted RPM frame. Building/sending a telemetry frame (heartbeat or not) never makes data fresher.
 All times are CLOCK_BOOTTIME nanoseconds, the clock pandad stamps `can` logMonoTime with
 (MessageBuilder::initEvent -> nanos_since_boot()).
 """
 from __future__ import annotations
 
 from . import wire as W
-from .ems11 import EMS11_LEN, Ems11Sample, decode_ems11
+from .ems11 import EMS11_ADDR, EMS11_LEN, Ems11Sample, decode_ems11
+from .ems366 import EMS366_ADDR, EMS366_LENS, decode_ems366
 
 NS_PER_MS = 1_000_000
 DEFAULT_STALE_MS = 300  # app LiveTracker staleMs
@@ -21,6 +23,23 @@ SELECTION_STATUS = {
 
 
 INVALID = "invalid"  # latest_frame() result kind: the newest evidence is explicitly bad
+
+# address -> (accepted lengths, decoder). The decoder is chosen by the frame's address, never by its length.
+DECODERS = {
+  EMS11_ADDR: (frozenset({EMS11_LEN}), decode_ems11),
+  EMS366_ADDR: (EMS366_LENS, decode_ems366),
+}
+
+
+class Frame(tuple):
+  """(logMonoTime_ns, dat) from latest_frame(), also recording the CAN address it came from.
+  Compares equal to the plain pair."""
+  address: int
+
+  def __new__(cls, t_ns: int, dat: bytes, address: int):
+    f = super().__new__(cls, (t_ns, dat))
+    f.address = address
+    return f
 
 
 def latest_frame(events, address: int, bus: int, rejects: dict | None = None):
@@ -48,9 +67,9 @@ def latest_frame(events, address: int, bus: int, rejects: dict | None = None):
       if c.address == address and c.src == bus:
         found = bytes(c.dat)  # the last match in an event is its newest
     if found is not None:
-      if len(found) != EMS11_LEN:
+      if len(found) not in DECODERS[address][0]:
         return bad("len")
-      return int(evt.logMonoTime), found
+      return Frame(int(evt.logMonoTime), found, address)
   return None
 
 
@@ -74,10 +93,14 @@ class RpmState:
     """Explicitly bad newest evidence: report INVALID now instead of letting the last good sample age out."""
     self._reject(reason)
 
-  def ingest(self, frame_ns: int, dat: bytes, now_ns: int) -> bool:
+  def ingest(self, frame_ns: int, dat: bytes, now_ns: int, address: int = EMS11_ADDR) -> bool:
     """`frame_ns` is the event's logMonoTime (pandad receive time), never the dequeue time.
-    `now_ns` must be sampled AFTER dequeuing, so a genuine frame can never lie in the future."""
-    if len(dat) != EMS11_LEN:
+    `now_ns` must be sampled AFTER dequeuing, so a genuine frame can never lie in the future.
+    `address` selects the decoder (EMS11 by default)."""
+    if address not in DECODERS:
+      return self._reject("address")
+    lengths, decode = DECODERS[address]
+    if len(dat) not in lengths:
       return self._reject("len")
     if frame_ns <= 0:
       return self._reject("bad_time")
@@ -87,7 +110,7 @@ class RpmState:
       return self._reject("too_old")  # backlog: never advance the counter with old data
     if self.last_frame_ns is not None and frame_ns <= self.last_frame_ns:
       return self._reject("out_of_order")
-    self.last_sample = decode_ems11(dat)
+    self.last_sample = decode(dat)
     self.last_frame_ns = frame_ns
     self.invalid_reason = None
     if self.frame_counter >= W.U32_MAX:

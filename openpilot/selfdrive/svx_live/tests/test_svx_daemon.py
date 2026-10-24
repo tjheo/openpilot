@@ -50,7 +50,7 @@ class Rig:
     self.d = D.LiveDaemon(self.server, lambda: self.enabled, self.sel, self._factory, logger=lambda m: None)
 
   def _factory(self, prof):
-    assert prof.address == 0x316 and prof.allowed_buses == frozenset({0})
+    assert prof.address == 0x316 and prof.fallback_address == 0x366 and prof.allowed_buses == frozenset({0})
     s = Src()
     self.srcs.append(s)
     return s
@@ -261,3 +261,14 @@ def test_unexpected_tick_error_is_contained(rig):
   assert r.steps(5)  # keeps running instead of crashing (the manager would restart it every second)
   assert r.d.errors == 5 and len([m for m in logs if "tick failed" in m]) == 1
   assert time.monotonic() - t0 >= 5 * D.TICK_S * 0.95
+
+
+def test_ems366_fallback_frame_streams_through_the_daemon(rig):
+  from openpilot.selfdrive.svx_live.rpm_state import Frame
+  r = rig()
+  c, sid, frames = r.connect()
+  r.srcs[0].next = Frame(D.clock_boottime_ns(), bytes([0x10, 0xF0, 0x0A, 0x10, 0, 0, 0]), 0x366)  # 7 bytes, N raw 2800
+  frames, _ = c.recv_frames(lambda: r.steps(1), until=lambda fs: any(f.type == W.T_RPM and f.fields[5] == W.STATUS_OK for f in fs))
+  ok = [f for f in frames if f.type == W.T_RPM and f.fields[5] == W.STATUS_OK][-1].fields
+  assert ok[3] == 2800 and ok[6] == W.FLAG_RPM_VALID | W.FLAG_FRAME_SEEN and r.d.state.last_sample.rpm == 700.0
+  c.close()

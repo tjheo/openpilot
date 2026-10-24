@@ -105,3 +105,39 @@ def test_profile_constants_match_opendbc():
   assert not CAR.KIA_SELTOS.config.flags & HyundaiFlags.CANFD
   assert str(CAR.KIA_SELTOS) == PROFILES["kia_seltos_2021_ems11"].fingerprint
   assert PROFILES["kia_seltos_2021_ems11"].allowed_buses == frozenset({0})
+  assert PROFILES["kia_seltos_2021_ems11"].fallback_address == 0x366
+
+
+def e366(raw):
+  return bytes([0x10, raw & 0xFF, raw >> 8, 0x10, 0, 0, 0])  # 7 bytes, as on a Seltos without EMS11
+
+
+def fallback_source(msgs, bus=0):
+  s = source(msgs, bus)
+  s.fallback, s.primary_seen = 0x366, False
+  return s
+
+
+def test_real_ems366_fallback_without_ems11():
+  s = fallback_source([can_bytes(T0, [(0x366, 0, e366(2800))]),
+                       can_bytes(T0 + 10_000_000, [(0x366, 128, e366(9)), (0x366, 0, e366(2804)), (0x366, 2, e366(1))])])
+  f = s.poll()
+  assert f == (T0 + 10_000_000, e366(2804)) and f.address == 0x366 and not s.primary_seen
+  assert source([can_bytes(T0, [(0x366, 0, e366(2800))])]).poll() is None  # no fallback configured: unchanged
+
+
+def test_real_ems11_wins_and_latches_off_the_fallback():
+  s = fallback_source([can_bytes(T0, [(0x316, 0, ems(3200))]), can_bytes(T0 + 10_000_000, [(0x366, 0, e366(2800))])])
+  f = s.poll()
+  assert f == (T0, ems(3200)) and f.address == 0x316 and s.primary_seen  # older EMS11 beats newer EMS_366
+  s._sock = Sock([can_bytes(T0 + 20_000_000, [(0x366, 0, e366(2800))])])
+  assert s.poll() is None  # once EMS11 was seen, EMS_366 is never used again by this source
+
+
+def test_real_wrong_length_ems11_also_latches_and_invalid_event_still_wins():
+  s = fallback_source([can_bytes(T0, [(0x366, 0, e366(2800)), (0x316, 0, b"\x00" * 6)])])
+  assert s.poll() == (INVALID, "len") and s.primary_seen
+  s = fallback_source([can_bytes(T0, [(0x366, 0, e366(2800))]), can_bytes(T0 + 10_000_000, [(0x2B0, 0, b"\x00" * 6)], valid=False)])
+  assert s.poll() == (INVALID, "invalid_event") and not s.primary_seen
+  s = fallback_source([can_bytes(T0, [(0x366, 0, e366(2800)[:6])])])
+  assert s.poll() == (INVALID, "len")

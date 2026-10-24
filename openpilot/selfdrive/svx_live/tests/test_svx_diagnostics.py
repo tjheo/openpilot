@@ -154,7 +154,7 @@ def test_start_and_summary_cadence_for_true_no_event():
   r.steps(int(25.5 / D.TICK_S))  # 25.5 s of fake time with an empty `can` queue
   start = r.emit.kinds("start")
   assert len(start) == 1 and start[0]["commit"] == COMMIT and r.revision_calls == 1
-  assert start[0]["address"] == 0x316 and start[0]["bus"] == [0] and start[0]["max_drain"] == MAX_DRAIN_PER_TICK
+  assert start[0]["address"] == 0x316 and start[0]["fallback_address"] == 0x366 and start[0]["bus"] == [0] and start[0]["max_drain"] == MAX_DRAIN_PER_TICK
   assert start[0]["keep"] == KEEP_PER_TICK and start[0]["protocol"] == W.VERSION
   s = summaries(r)
   assert [round(x["t"]) for x in s] == [3, 13, 23]  # first after FIRST_SUMMARY_S, then every SUMMARY_PERIOD_S

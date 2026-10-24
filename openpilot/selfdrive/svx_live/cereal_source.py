@@ -48,9 +48,14 @@ _UNPARSEABLE = _Unparseable()
 
 
 class CerealCanSource:
+  """`address` is the primary RPM message (EMS11). `fallback` (EMS_366 or None) is used only while the primary
+  has never been seen by this source: once a primary frame (or a wrong-length primary) appears, the source
+  uses the primary alone, exactly as without a fallback. A new source is created after every data reset."""
   stats = None  # optional diagnostics.SourceStats; None -> exactly the plain RPM path
+  fallback = None
+  primary_seen = False
 
-  def __init__(self, address: int, bus: int, stats=None):
+  def __init__(self, address: int, bus: int, stats=None, fallback: int | None = None):
     from openpilot.cereal import messaging
     self._log_from_bytes = messaging.log_from_bytes
     self._sock = messaging.sub_sock("can", conflate=False)
@@ -59,6 +64,8 @@ class CerealCanSource:
     self.rejects: dict = {}
     self.drain_caps = 0
     self.stats = stats
+    self.fallback = fallback
+    self.primary_seen = False
 
   def _stat(self, name: str, *args) -> None:
     """Diagnostics hook; a broken diagnostics object never changes what poll() returns or raises."""
@@ -83,7 +90,8 @@ class CerealCanSource:
 
   def poll(self):
     """latest_frame() result for the queued messages: (logMonoTime_ns, dat), (INVALID, reason) or None.
-    A message that cannot be parsed is explicit bad evidence when it is the newest one."""
+    A message that cannot be parsed is explicit bad evidence when it is the newest one. A frame result
+    is a rpm_state.Frame whose .address tells which message it came from."""
     raw = self._drain()
     events = []
     for m in raw:
@@ -100,6 +108,10 @@ class CerealCanSource:
         self._stat("on_census_error")
     try:
       result = latest_frame(events, self.address, self.bus, self.rejects)
+      if result is not None and (result[0] != INVALID or result[1] == "len"):
+        self.primary_seen = True
+      elif result is None and self.fallback is not None and not self.primary_seen:
+        result = latest_frame(events, self.fallback, self.bus, self.rejects)
     except Exception:
       self.rejects["parse"] = self.rejects.get("parse", 0) + 1
       self._stat("on_scan_error")
