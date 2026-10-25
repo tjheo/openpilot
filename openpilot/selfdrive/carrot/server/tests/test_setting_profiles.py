@@ -19,7 +19,10 @@ CATALOG = {
   "ApplyModelSpeed": {"default": 0, "min": -120, "max": 120},
   "TFollowDecelBoost": {"default": 50, "min": 0, "max": 100},
   "CruiseSpeed1": {"default": 30, "min": 0, "max": 160},
-  "DriverMonitoringEnabled": {"default": 1, "search_only": True},
+  # Matches the live catalog: listed in its group, excluded only because it is
+  # backup-excluded. NNFF keeps covering the separate search-only exclusion.
+  "DriverMonitoringEnabled": {"default": 1, "min": 0, "max": 1},
+  "NNFF": {"default": 0, "search_only": True},
 }
 
 
@@ -63,9 +66,17 @@ def test_unknown_parameters_are_dropped_from_stored_values(profile_store, monkey
   assert created["values"]["ApplyModelSpeed"] == 5
 
 
-def test_search_only_parameters_are_excluded_from_new_profiles(profile_store):
+def test_search_only_parameters_are_excluded_from_new_profiles(profile_store, monkeypatch):
+  monkeypatch.setattr(setting_profiles, "snapshot_current_setting_values",
+                      lambda: {"ApplyModelSpeed": 0, "NNFF": 1})
+  created = setting_profiles.create_setting_profile("p")
+  assert created["values"] == {"ApplyModelSpeed": 0}
+
+
+def test_visible_driver_monitoring_toggle_stays_out_of_profiles(profile_store):
   created = setting_profiles.create_setting_profile("p")
   assert "DriverMonitoringEnabled" not in created["values"]
+  assert "DriverMonitoringEnabled" not in setting_profiles._setting_defaults()
 
 
 def test_snapshot_does_not_read_search_only_parameters(profile_store, monkeypatch):

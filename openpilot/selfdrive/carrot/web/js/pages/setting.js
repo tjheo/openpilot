@@ -1158,6 +1158,27 @@ function syncSettingControlState(row, value) {
       select.textContent = getSettingOptionLabel(row.dataset.settingName || "", value);
     }
   }
+  syncDriverMonitoringTestBadge(row, value);
+}
+
+// DriverMonitoringEnabled OFF is a test-only state; keep it unmistakable on
+// its row whenever the shown value is OFF, and remove the marker once ON.
+function syncDriverMonitoringTestBadge(row, value) {
+  if (row.dataset.settingName !== "DriverMonitoringEnabled") return;
+  const off = Number(value) === 0;
+  row.classList.toggle("setting--dm-test", off);
+  const titleRow = row.querySelector(".setting-title-row");
+  let badge = row.querySelector(".setting-dm-test-badge");
+  if (!off || !titleRow) {
+    badge?.remove();
+    return;
+  }
+  if (!badge) {
+    badge = row.ownerDocument.createElement("span");
+    badge.className = "chip chip--compact chip--danger setting-dm-test-badge";
+    titleRow.insertBefore(badge, titleRow.children[1] || null);
+  }
+  badge.textContent = getUIText("dm_test_badge", "TEST · DM OFF");
 }
 
 let settingGroupTransitionLock = false;
@@ -2908,6 +2929,9 @@ async function renderItems(group, options = {}) {
           refreshSettingHistory();
         }
       } catch (e) {
+        // A cancelled or failed write must not leave the control showing a
+        // value that was never saved.
+        if (val.dataset.committedValue !== undefined) syncSettingControlState(el, val.dataset.committedValue);
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
     }

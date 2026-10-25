@@ -33,6 +33,11 @@ async function setParam(name, value, options) {
       "Experimental driver monitoring may violate applicable law. Use only for experiments in a controlled test environment. Public-road legality and safety are not assured. Enable for experimental use only?"));
     if (!accepted) throw new Error(getUIText("dm_experimental_cancelled", "Experimental mode was not enabled."));
   }
+  if (name === "DriverMonitoringEnabled" && Number(value) === 0) {
+    const accepted = await appConfirm(getUIText("dm_disable_test_confirm",
+      "Turn driver monitoring OFF for testing? DM alerts, monitoring force deceleration and lockout stop. OFF stays saved across restarts until you turn it back ON."));
+    if (!accepted) throw new Error(getUIText("dm_disable_test_cancelled", "Driver monitoring stays ON."));
+  }
   await getParamCommitter().commit(name, value, options);
   return true;
 }

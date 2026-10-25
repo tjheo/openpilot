@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from ..config import CARROT_SETTING_PROFILES_PATH
 from .params import (
+  BACKUP_EXCLUDED_PARAMS,
   get_param_values,
   preview_param_restore_values,
   restore_param_values_validated,
@@ -85,6 +86,12 @@ def _clean_name(value: Any) -> str:
   return name[:MAX_PROFILE_NAME_LEN]
 
 
+def _profile_setting(name: str, meta: Dict[str, Any]) -> bool:
+  # Backup-excluded values (DriverMonitoringEnabled) are chosen per device and
+  # must never be captured into, or applied from, a profile.
+  return not meta.get("search_only", False) and name not in BACKUP_EXCLUDED_PARAMS
+
+
 def _clean_values(values: Any) -> Dict[str, Any]:
   if not isinstance(values, dict):
     return {}
@@ -92,7 +99,7 @@ def _clean_values(values: Any) -> Dict[str, Any]:
   allowed = {
     name
     for name, meta in by_name.items()
-    if not meta.get("search_only", False)
+    if _profile_setting(name, meta)
   }
   return {
     str(key): value
@@ -106,7 +113,7 @@ def _setting_defaults() -> Dict[str, Any]:
   return {
     name: meta.get("default", 0)
     for name, meta in by_name.items()
-    if not meta.get("search_only", False)
+    if _profile_setting(name, meta)
   }
 
 
