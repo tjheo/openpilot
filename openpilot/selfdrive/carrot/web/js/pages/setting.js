@@ -1162,10 +1162,25 @@ function syncSettingControlState(row, value) {
 }
 
 // DriverMonitoringEnabled OFF is a test-only state; keep it unmistakable on
-// its row whenever the shown value is OFF, and remove the marker once ON.
+// its row. dm2d monitors only when this saved setting is ON *and* the
+// internal DriverMonitoringSessionDisabled marker (three-CANCEL gesture, this
+// ignition only) is not set, so the row reads that marker too (read-only) and
+// never shows a bare ON while monitoring is requested off for this drive.
+function paramFlagIsOn(value) {
+  return value === true || Number(value) === 1 || String(value).toLowerCase() === "true";
+}
+
 function syncDriverMonitoringTestBadge(row, value) {
   if (row.dataset.settingName !== "DriverMonitoringEnabled") return;
-  const off = Number(value) === 0;
+  row.dataset.dmSavedOn = paramFlagIsOn(value) ? "1" : "0";
+  renderDriverMonitoringTestBadge(row);
+  refreshDriverMonitoringSessionState(row);
+}
+
+function renderDriverMonitoringTestBadge(row) {
+  const savedOff = row.dataset.dmSavedOn === "0";
+  const sessionOff = row.dataset.dmSessionDisabled === "1";
+  const off = savedOff || sessionOff;
   row.classList.toggle("setting--dm-test", off);
   const titleRow = row.querySelector(".setting-title-row");
   let badge = row.querySelector(".setting-dm-test-badge");
@@ -1178,7 +1193,24 @@ function syncDriverMonitoringTestBadge(row, value) {
     badge.className = "chip chip--compact chip--danger setting-dm-test-badge";
     titleRow.insertBefore(badge, titleRow.children[1] || null);
   }
-  badge.textContent = getUIText("dm_test_badge", "TEST · DM OFF");
+  badge.textContent = savedOff
+    ? getUIText("dm_test_badge", "TEST · DM OFF")
+    : getUIText("dm_test_badge_session", "TEST · DM OFF this drive (CANCEL ×3)");
+}
+
+let driverMonitoringSessionRead = null;
+
+function refreshDriverMonitoringSessionState(row) {
+  if (driverMonitoringSessionRead || typeof bulkGet !== "function") return;
+  driverMonitoringSessionRead = Promise.resolve()
+    .then(() => bulkGet(["DriverMonitoringSessionDisabled"]))
+    .then((values) => {
+      row.dataset.dmSessionDisabled = paramFlagIsOn(values?.DriverMonitoringSessionDisabled) ? "1" : "0";
+      renderDriverMonitoringTestBadge(row);
+    })
+    // Supplementary read: keep the last known marker state on failure.
+    .catch(() => {})
+    .finally(() => { driverMonitoringSessionRead = null; });
 }
 
 let settingGroupTransitionLock = false;

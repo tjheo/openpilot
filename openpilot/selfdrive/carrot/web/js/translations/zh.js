@@ -771,6 +771,7 @@ window.CarrotTranslations.register("zh", {
     dm_disable_test_confirm: "要为测试关闭驾驶员监控吗？DM 警告、监控触发的强制减速和锁定将停止。关闭状态在重启后仍保留，直到重新开启。",
     dm_disable_test_cancelled: "驾驶员监控保持开启。",
     dm_test_badge: "TEST · DM 关闭",
+    dm_test_badge_session: "TEST · 本次行驶 DM 关闭（CANCEL ×3）",
     vision_unavailable_hint: "请在设置中启用 Carrot Vision。",
     vision_step_unavailable: "请检查设置。",
     vision_step_inactive: "等待启动",

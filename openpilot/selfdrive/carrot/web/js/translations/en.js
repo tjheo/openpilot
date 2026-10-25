@@ -813,6 +813,7 @@ window.CarrotTranslations.register("en", {
     dm_disable_test_confirm: "Turn driver monitoring OFF for testing? DM alerts, monitoring force deceleration and lockout stop. OFF stays saved across restarts until you turn it back ON.",
     dm_disable_test_cancelled: "Driver monitoring stays ON.",
     dm_test_badge: "TEST · DM OFF",
+    dm_test_badge_session: "TEST · DM OFF this drive (CANCEL ×3)",
     vision_unavailable_hint: "Enable Carrot Vision in settings.",
     vision_step_unavailable: "Check the setting.",
     vision_step_inactive: "Waiting to start",

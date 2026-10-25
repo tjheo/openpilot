@@ -63,11 +63,26 @@ function makeRow(name) {
   return row;
 }
 
-function badgeContext() {
-  const context = vm.createContext({ getUIText: (_key, fallback) => fallback });
-  vm.runInContext(sliceFunction(settingPage, "syncDriverMonitoringTestBadge"), context);
+function badgeContext(sessionValues = { DriverMonitoringSessionDisabled: false }) {
+  const reads = [];
+  const context = vm.createContext({
+    getUIText: (_key, fallback) => fallback,
+    bulkGet: async (names) => {
+      reads.push(names);
+      if (sessionValues instanceof Error) throw sessionValues;
+      return sessionValues;
+    },
+  });
+  const start = settingPage.indexOf("function paramFlagIsOn(");
+  const end = settingPage.indexOf("let settingGroupTransitionLock", start);
+  assert.ok(start > 0 && end > start, "DM badge block is present");
+  vm.runInContext(settingPage.slice(start, end), context);
+  context.reads = reads;
   return context;
 }
+
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+const badgeOf = (row) => row.querySelector(".setting-dm-test-badge");
 
 test("turning driver monitoring OFF asks once; cancel writes nothing, ON never asks", async () => {
   const writes = [];
@@ -92,37 +107,74 @@ test("turning driver monitoring OFF asks once; cancel writes nothing, ON never a
   assert.equal(writes.length, 2);
 });
 
-test("OFF shows a TEST marker on the DM row and ON removes it", () => {
+test("saved OFF shows a TEST marker on the DM row and ON removes it", async () => {
   const context = badgeContext();
   const row = makeRow("DriverMonitoringEnabled");
 
   context.syncDriverMonitoringTestBadge(row, 1);
-  assert.equal(row.querySelector(".setting-dm-test-badge"), null);
+  await settle();
+  assert.equal(badgeOf(row), null);
   assert.equal(row.classList.contains("setting--dm-test"), false);
 
-  context.syncDriverMonitoringTestBadge(row, "0");
-  const badge = row.querySelector(".setting-dm-test-badge");
-  assert.ok(badge);
-  assert.match(badge.textContent, /TEST/);
-  assert.match(badge.className, /chip--danger/);
-  assert.equal(row.classList.contains("setting--dm-test"), true);
-  // Placed right after the title, before the risk badge.
-  assert.equal(row.querySelector(".setting-title-row").children[1], badge);
+  // /api/params_bulk returns real booleans for BOOL params.
+  for (const off of [false, 0, "0", "false"]) {
+    context.syncDriverMonitoringTestBadge(row, off);
+    await settle();
+    const badge = badgeOf(row);
+    assert.ok(badge, `OFF marker for ${JSON.stringify(off)}`);
+    assert.equal(badge.textContent, "TEST · DM OFF");
+    assert.match(badge.className, /chip--danger/);
+    assert.equal(row.classList.contains("setting--dm-test"), true);
+    // Placed right after the title, before the risk badge; never duplicated.
+    const titleChildren = row.querySelector(".setting-title-row").children;
+    assert.equal(titleChildren[1], badge);
+    assert.equal(titleChildren.filter((c) => c.matches(".setting-dm-test-badge")).length, 1);
+  }
 
-  context.syncDriverMonitoringTestBadge(row, 0);
-  assert.equal(row.querySelector(".setting-title-row").children.filter((c) => c.matches(".setting-dm-test-badge")).length, 1);
-
-  context.syncDriverMonitoringTestBadge(row, true);
-  assert.equal(row.querySelector(".setting-dm-test-badge"), null);
-  assert.equal(row.classList.contains("setting--dm-test"), false);
+  for (const on of [true, 1, "1", "true"]) {
+    context.syncDriverMonitoringTestBadge(row, false);
+    await settle();
+    context.syncDriverMonitoringTestBadge(row, on);
+    await settle();
+    assert.equal(badgeOf(row), null, `no marker for ${JSON.stringify(on)}`);
+    assert.equal(row.classList.contains("setting--dm-test"), false);
+  }
 });
 
-test("other settings never receive the TEST marker", () => {
-  const context = badgeContext();
+test("saved ON with the CANCEL session marker set is not shown as plain ON", async () => {
+  const context = badgeContext({ DriverMonitoringSessionDisabled: true });
+  const row = makeRow("DriverMonitoringEnabled");
+  context.syncDriverMonitoringTestBadge(row, true);
+  await settle();
+  assert.deepEqual(context.reads.map((names) => [...names]), [["DriverMonitoringSessionDisabled"]]);
+  assert.equal(badgeOf(row).textContent, "TEST · DM OFF this drive (CANCEL ×3)");
+  assert.equal(row.classList.contains("setting--dm-test"), true);
+
+  // Saved OFF takes precedence in the label.
+  context.syncDriverMonitoringTestBadge(row, false);
+  await settle();
+  assert.equal(badgeOf(row).textContent, "TEST · DM OFF");
+});
+
+test("a failed session-marker read keeps the saved-setting marker working", async () => {
+  const context = badgeContext(new Error("offline"));
+  const row = makeRow("DriverMonitoringEnabled");
+  context.syncDriverMonitoringTestBadge(row, false);
+  await settle();
+  assert.equal(badgeOf(row).textContent, "TEST · DM OFF");
+  context.syncDriverMonitoringTestBadge(row, true);
+  await settle();
+  assert.equal(badgeOf(row), null);
+});
+
+test("other settings never receive the TEST marker or read the session marker", async () => {
+  const context = badgeContext({ DriverMonitoringSessionDisabled: true });
   const row = makeRow("DriverMonitoringMode");
   context.syncDriverMonitoringTestBadge(row, 0);
-  assert.equal(row.querySelector(".setting-dm-test-badge"), null);
+  await settle();
+  assert.equal(badgeOf(row), null);
   assert.equal(row.classList.contains("setting--dm-test"), false);
+  assert.equal(context.reads.length, 0);
 });
 
 test("every control sync applies the marker and a failed write restores the saved value", () => {
@@ -134,7 +186,7 @@ test("every control sync applies the marker and a failed write restores the save
 test("all UI languages define the DM test strings", async () => {
   for (const lang of ["en", "ko", "zh"]) {
     const source = await readFile(new URL(`../js/translations/${lang}.js`, import.meta.url), "utf8");
-    for (const key of ["dm_disable_test_confirm", "dm_disable_test_cancelled", "dm_test_badge"]) {
+    for (const key of ["dm_disable_test_confirm", "dm_disable_test_cancelled", "dm_test_badge", "dm_test_badge_session"]) {
       assert.match(source, new RegExp(`\\b${key}: "`), `${lang} ${key}`);
     }
   }

@@ -193,3 +193,12 @@ def test_no_dedicated_driver_monitoring_route_exists():
                          source.read_text(encoding="utf-8"))
   assert "/api/param_set" in routes
   assert not [r for r in routes if "monitor" in r.lower() or "/dm" in r.lower()]
+
+
+def test_session_marker_is_readable_for_the_row_and_reading_records_nothing(device):
+  root, _ = device
+  (root / "DriverMonitoringSessionDisabled").write_text("1")
+  status, body = run(call("GET", "/api/params_bulk?names=DriverMonitoringEnabled,DriverMonitoringSessionDisabled"))
+  assert status == 200
+  assert body["values"] == {"DriverMonitoringEnabled": True, "DriverMonitoringSessionDisabled": True}
+  assert param_changes.read_param_changes() == []

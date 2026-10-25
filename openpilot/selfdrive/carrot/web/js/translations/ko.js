@@ -811,6 +811,7 @@ window.CarrotTranslations.register("ko", {
     dm_disable_test_confirm: "시험용으로 운전자 감시를 끌까요? DM 경고, 감시로 인한 강제 감속과 재사용 제한이 멈춥니다. 끈 값은 다시 켤 때까지 재시작 후에도 유지됩니다.",
     dm_disable_test_cancelled: "운전자 감시를 켠 상태로 유지합니다.",
     dm_test_badge: "TEST · DM 꺼짐",
+    dm_test_badge_session: "TEST · 이번 시동 DM 꺼짐 (CANCEL ×3)",
     vision_unavailable_hint: "Carrot Vision 사용 설정을 켜세요.",
     vision_step_unavailable: "설정을 확인해 주세요.",
     vision_step_inactive: "시작 대기 중",
