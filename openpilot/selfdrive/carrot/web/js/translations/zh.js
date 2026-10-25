@@ -772,6 +772,7 @@ window.CarrotTranslations.register("zh", {
     dm_disable_test_cancelled: "驾驶员监控保持开启。",
     dm_test_badge: "TEST · DM 关闭",
     dm_test_badge_session: "TEST · 本次行驶 DM 关闭（CANCEL ×3）",
+    dm_test_badge_unknown: "已保存为开启 · 本次行驶状态未知",
     vision_unavailable_hint: "请在设置中启用 Carrot Vision。",
     vision_step_unavailable: "请检查设置。",
     vision_step_inactive: "等待启动",

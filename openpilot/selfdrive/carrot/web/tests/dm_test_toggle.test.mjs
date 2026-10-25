@@ -156,15 +156,87 @@ test("saved ON with the CANCEL session marker set is not shown as plain ON", asy
   assert.equal(badgeOf(row).textContent, "TEST · DM OFF");
 });
 
-test("a failed session-marker read keeps the saved-setting marker working", async () => {
+test("a failed session-marker read shows saved ON as unknown, never plain ON", async () => {
   const context = badgeContext(new Error("offline"));
   const row = makeRow("DriverMonitoringEnabled");
   context.syncDriverMonitoringTestBadge(row, false);
   await settle();
   assert.equal(badgeOf(row).textContent, "TEST · DM OFF");
+
   context.syncDriverMonitoringTestBadge(row, true);
   await settle();
+  assert.equal(badgeOf(row).textContent, "Saved ON · this-drive status unknown");
+  assert.match(badgeOf(row).className, /chip--warning/);
+  assert.equal(row.classList.contains("setting--dm-test"), false);
+});
+
+test("a failed re-read drops a previously known session state back to unknown", async () => {
+  let fail = false;
+  const context = badgeContext({ DriverMonitoringSessionDisabled: false });
+  context.bulkGet = async () => {
+    if (fail) throw new Error("offline");
+    return { DriverMonitoringSessionDisabled: false };
+  };
+  const row = makeRow("DriverMonitoringEnabled");
+  await context.syncDriverMonitoringTestBadge(row, true);
   assert.equal(badgeOf(row), null);
+  fail = true;
+  await context.syncDriverMonitoringTestBadge(row, true);
+  assert.equal(badgeOf(row).textContent, "Saved ON · this-drive status unknown");
+});
+
+test("a response without the marker is unknown, not ON", async () => {
+  const context = badgeContext({});
+  const row = makeRow("DriverMonitoringEnabled");
+  await context.syncDriverMonitoringTestBadge(row, 1);
+  assert.equal(badgeOf(row).textContent, "Saved ON · this-drive status unknown");
+});
+
+test("rows sharing one in-flight read all update; a row detached by navigation does not", async () => {
+  let release;
+  const reads = [];
+  const context = badgeContext();
+  context.bulkGet = (names) => {
+    reads.push([...names]);
+    return new Promise((resolve) => { release = resolve; });
+  };
+
+  const oldRow = makeRow("DriverMonitoringEnabled");
+  oldRow.isConnected = true;
+  const first = context.syncDriverMonitoringTestBadge(oldRow, true);
+  await settle();
+  // Pending read: saved ON is shown as unknown, not ON.
+  assert.equal(badgeOf(oldRow).textContent, "Saved ON · this-drive status unknown");
+
+  // Navigation re-renders the group: old row detached, new row asks while the read is in flight.
+  oldRow.isConnected = false;
+  const newRow = makeRow("DriverMonitoringEnabled");
+  newRow.isConnected = true;
+  const second = context.syncDriverMonitoringTestBadge(newRow, true);
+  const otherRow = makeRow("DriverMonitoringEnabled");
+  const third = context.syncDriverMonitoringTestBadge(otherRow, true);
+  assert.equal(second, first);
+  assert.equal(third, first);
+  assert.equal(reads.length, 1, "one shared read");
+
+  release({ DriverMonitoringSessionDisabled: true });
+  await first;
+  for (const row of [newRow, otherRow]) {
+    assert.equal(badgeOf(row).textContent, "TEST · DM OFF this drive (CANCEL ×3)");
+    assert.equal(row.classList.contains("setting--dm-test"), true);
+  }
+  // Detached row keeps its earlier render and is not touched.
+  assert.equal(oldRow.dataset.dmSessionDisabled, undefined);
+  assert.equal(badgeOf(oldRow).textContent, "Saved ON · this-drive status unknown");
+
+  // After the read settles, the next sync issues a fresh read.
+  const fourth = context.syncDriverMonitoringTestBadge(newRow, true);
+  assert.notEqual(fourth, first);
+  await settle();
+  assert.equal(reads.length, 2);
+  release({ DriverMonitoringSessionDisabled: false });
+  await fourth;
+  assert.equal(badgeOf(newRow), null);
 });
 
 test("other settings never receive the TEST marker or read the session marker", async () => {
@@ -186,7 +258,7 @@ test("every control sync applies the marker and a failed write restores the save
 test("all UI languages define the DM test strings", async () => {
   for (const lang of ["en", "ko", "zh"]) {
     const source = await readFile(new URL(`../js/translations/${lang}.js`, import.meta.url), "utf8");
-    for (const key of ["dm_disable_test_confirm", "dm_disable_test_cancelled", "dm_test_badge", "dm_test_badge_session"]) {
+    for (const key of ["dm_disable_test_confirm", "dm_disable_test_cancelled", "dm_test_badge", "dm_test_badge_session", "dm_test_badge_unknown"]) {
       assert.match(source, new RegExp(`\\b${key}: "`), `${lang} ${key}`);
     }
   }

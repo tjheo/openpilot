@@ -812,6 +812,7 @@ window.CarrotTranslations.register("ko", {
     dm_disable_test_cancelled: "운전자 감시를 켠 상태로 유지합니다.",
     dm_test_badge: "TEST · DM 꺼짐",
     dm_test_badge_session: "TEST · 이번 시동 DM 꺼짐 (CANCEL ×3)",
+    dm_test_badge_unknown: "저장값 켜짐 · 이번 시동 상태 확인 안 됨",
     vision_unavailable_hint: "Carrot Vision 사용 설정을 켜세요.",
     vision_step_unavailable: "설정을 확인해 주세요.",
     vision_step_inactive: "시작 대기 중",

@@ -294,6 +294,8 @@ def test_driver_monitoring_setting_is_default_on_visible_test_toggle_and_session
   # for closed-area tests; the copy says OFF is TEST and names the layers.
   assert "search_only" not in enabled
   assert "TEST" in enabled["title"] and "TEST" in enabled["etitle"] and "TEST" in enabled["ctitle"]
+  # The switch is the saved setting, not live effective monitoring state.
+  assert "저장 설정" in enabled["title"] and "saved setting" in enabled["etitle"] and "已保存设置" in enabled["ctitle"]
   assert "DM 카메라" in enabled["descr"] and "법규" in enabled["descr"]
   assert "DM camera" in enabled["edescr"] and "laws" in enabled["edescr"]
   for layer in ("dm2d", "dmonitoringmodeld"):

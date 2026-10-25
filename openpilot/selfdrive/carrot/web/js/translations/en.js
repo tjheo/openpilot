@@ -814,6 +814,7 @@ window.CarrotTranslations.register("en", {
     dm_disable_test_cancelled: "Driver monitoring stays ON.",
     dm_test_badge: "TEST · DM OFF",
     dm_test_badge_session: "TEST · DM OFF this drive (CANCEL ×3)",
+    dm_test_badge_unknown: "Saved ON · this-drive status unknown",
     vision_unavailable_hint: "Enable Carrot Vision in settings.",
     vision_step_unavailable: "Check the setting.",
     vision_step_inactive: "Waiting to start",
