@@ -1158,6 +1158,80 @@ function syncSettingControlState(row, value) {
       select.textContent = getSettingOptionLabel(row.dataset.settingName || "", value);
     }
   }
+  syncDriverMonitoringTestBadge(row, value);
+}
+
+// DriverMonitoringEnabled OFF is a test-only state; keep it unmistakable on
+// its row. The switch is the saved setting only. dm2d monitors only when it is
+// ON *and* the internal DriverMonitoringSessionDisabled marker (three-CANCEL
+// gesture, this ignition only) is not set, so the row reads that marker too
+// (read-only). Until a read succeeds, a saved ON is labelled as unknown for
+// this drive rather than shown as a bare ON. This is not live dm2d telemetry.
+function paramFlagIsOn(value) {
+  return value === true || Number(value) === 1 || String(value).toLowerCase() === "true";
+}
+
+function syncDriverMonitoringTestBadge(row, value) {
+  if (row.dataset.settingName !== "DriverMonitoringEnabled") return;
+  row.dataset.dmSavedOn = paramFlagIsOn(value) ? "1" : "0";
+  renderDriverMonitoringTestBadge(row);
+  return refreshDriverMonitoringSessionState(row);
+}
+
+function renderDriverMonitoringTestBadge(row) {
+  const savedOff = row.dataset.dmSavedOn === "0";
+  const session = row.dataset.dmSessionDisabled; // "1", "0" or absent = unknown
+  const sessionOff = session === "1";
+  const unknown = !savedOff && session !== "0" && session !== "1";
+  const off = savedOff || sessionOff;
+  row.classList.toggle("setting--dm-test", off);
+  const titleRow = row.querySelector(".setting-title-row");
+  let badge = row.querySelector(".setting-dm-test-badge");
+  if ((!off && !unknown) || !titleRow) {
+    badge?.remove();
+    return;
+  }
+  if (!badge) {
+    badge = row.ownerDocument.createElement("span");
+    titleRow.insertBefore(badge, titleRow.children[1] || null);
+  }
+  badge.className = `chip chip--compact ${off ? "chip--danger" : "chip--warning"} setting-dm-test-badge`;
+  badge.textContent = savedOff
+    ? getUIText("dm_test_badge", "TEST · DM OFF")
+    : sessionOff
+      ? getUIText("dm_test_badge_session", "TEST · DM OFF this drive (CANCEL ×3)")
+      : getUIText("dm_test_badge_unknown", "Saved ON · this-drive status unknown");
+}
+
+// One shared in-flight read; every row that asked while it was pending gets the
+// result. Rows detached by navigation are dropped, never updated.
+let driverMonitoringSessionRead = null;
+const driverMonitoringSessionRows = new Set();
+
+function refreshDriverMonitoringSessionState(row) {
+  if (typeof bulkGet !== "function") return Promise.resolve();
+  driverMonitoringSessionRows.add(row);
+  if (driverMonitoringSessionRead) return driverMonitoringSessionRead;
+  const apply = (state) => {
+    const rows = [...driverMonitoringSessionRows];
+    driverMonitoringSessionRows.clear();
+    for (const target of rows) {
+      if (target.isConnected === false) continue;
+      if (state === null) delete target.dataset.dmSessionDisabled;
+      else target.dataset.dmSessionDisabled = state;
+      renderDriverMonitoringTestBadge(target);
+    }
+  };
+  driverMonitoringSessionRead = Promise.resolve()
+    .then(() => bulkGet(["DriverMonitoringSessionDisabled"]))
+    .then((values) => {
+      const raw = values?.DriverMonitoringSessionDisabled;
+      apply(raw === undefined || raw === null ? null : (paramFlagIsOn(raw) ? "1" : "0"));
+    })
+    // A failed read means unknown, not ON.
+    .catch(() => apply(null))
+    .finally(() => { driverMonitoringSessionRead = null; });
+  return driverMonitoringSessionRead;
 }
 
 let settingGroupTransitionLock = false;
@@ -2908,6 +2982,9 @@ async function renderItems(group, options = {}) {
           refreshSettingHistory();
         }
       } catch (e) {
+        // A cancelled or failed write must not leave the control showing a
+        // value that was never saved.
+        if (val.dataset.committedValue !== undefined) syncSettingControlState(el, val.dataset.committedValue);
         showAppToast((UI_STRINGS[LANG].set_failed || "set failed: ") + e.message, { tone: "error" });
       }
     }

@@ -1943,21 +1943,20 @@
     {
       "group": "시작",
       "name": "DriverMonitoringEnabled",
-      "title": "운전자 감시 사용 (예외 설정)",
-      "descr": "기본값은 켜짐이며 그대로 두는 것을 권장합니다. 이 예외 옵션은 DM 카메라가 없거나 고장 나서 정상 운전자 감시를 사용할 수 없는 장치를 위한 것입니다. 끄면 일반 주행의 DM 모델과 경고, 감시로 인한 강제 감속 및 재사용 제한이 비활성화됩니다. 운전자 감시 없이 운행하면 지역 법규, 차량 요건 또는 사용 조건을 위반할 수 있으므로 적용 요건과 안전 책임을 확인한 경우에만 끄세요.",
+      "title": "운전자 감시 사용 · 저장 설정 (끄면 TEST)",
+      "descr": "기본값은 켜짐입니다. 끄기는 사유지 등 통제된 시험 공간에서의 동작 시험, 또는 DM 카메라가 없거나 고장 난 장치용이며 웹에 TEST로 표시됩니다. 끄면 약 2초 안에 운전자 감시 판정(dm2d)이 중립 상태를 발행하여 DM 경고, 감시로 인한 강제 감속과 재사용 제한이 적용되지 않고, 일반 주행 중 DM 모델(dmonitoringmodeld)도 실행하지 않습니다. 조향·가감속 제어, 판다 안전 및 다른 경고는 바뀌지 않습니다. 끈 값은 재시작 후에도 유지되므로 시험 후 다시 켜세요. 변경은 설정 변경 기록에 남습니다. 운전자 감시 없이 운행하면 지역 법규, 차량 요건 또는 사용 조건을 위반할 수 있습니다.",
       "egroup": "START",
-      "etitle": "Enable Driver Monitoring (Exception)",
-      "edescr": "Enabled by default, and leaving it enabled is recommended. This exception is intended only for devices without a DM camera or with a failed DM camera that cannot provide normal driver monitoring. Turning it off disables the normal-driving DM model and alerts, monitoring-triggered force deceleration, and lockout. Driving without driver monitoring may violate applicable laws, vehicle requirements, or terms of use; turn it off only after checking the requirements and accepting the safety responsibility.",
+      "etitle": "Enable Driver Monitoring · saved setting (OFF = TEST)",
+      "edescr": "Enabled by default. OFF is for operation tests in a controlled test area such as private property, or for devices without a working DM camera, and is marked TEST in the Web UI. Within about two seconds of turning it off, the driver-monitoring policy (dm2d) publishes a neutral state, so DM alerts, monitoring-triggered force deceleration and lockout are not applied, and the DM model (dmonitoringmodeld) no longer runs during normal driving. Steering/acceleration control, Panda safety and other alerts are unchanged. OFF persists across restarts, so turn it back on after testing. Changes are recorded in the setting change history. Driving without driver monitoring may violate applicable laws, vehicle requirements, or terms of use.",
       "cgroup": "启动设置",
-      "ctitle": "启用驾驶员监控（例外设置）",
-      "cdescr": "默认开启，建议保持开启。此例外选项仅供未安装 DM 摄像头，或 DM 摄像头故障而无法正常进行驾驶员监控的设备使用。关闭后，正常行驶时的 DM 模型与警告、监控触发的强制减速及锁定都会停用。未启用驾驶员监控时驾驶，可能违反所在地法律、车辆要求或使用条件；请仅在确认适用要求并承担安全责任后关闭。",
+      "ctitle": "启用驾驶员监控 · 已保存设置（关闭=TEST）",
+      "cdescr": "默认开启。关闭用于私有场地等受控测试区域中的功能测试，或无可用 DM 摄像头的设备，并在网页中标记为 TEST。关闭后约2秒内，驾驶员监控策略（dm2d）发布中立状态，不再执行 DM 警告、监控触发的强制减速和锁定，正常行驶时也不再运行 DM 模型（dmonitoringmodeld）。转向/加减速控制、Panda 安全及其他警告不变。关闭状态在重启后仍保留，测试后请重新开启。更改会记录在设置变更历史中。未启用驾驶员监控时驾驶可能违反所在地法律、车辆要求或使用条件。",
       "min": 0,
       "max": 1,
       "default": 1,
       "unit": 1,
       "control": "toggle",
-      "risk": "high",
-      "search_only": true
+      "risk": "high"
     },
     {
       "group": "시작",
