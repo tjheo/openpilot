@@ -329,9 +329,11 @@ class CommandReader:
     self.seen = deque(maxlen=128)
     self.last_check = 0.0
     self.is_repeat = False
+    self.accepted_id = None
 
   def read(self, allowed=True, now=None):
     self.is_repeat = False
+    self.accepted_id = None
     now = time.monotonic() if now is None else now
     if now - self.last_check < 0.02:
       return None
@@ -360,6 +362,7 @@ class CommandReader:
         if isinstance(until, (int, float)) and until > now:
           continue
       if allowed and message.get('action') in ACTIONS:
+        self.accepted_id = message['id']
         self.is_repeat = bool(message.get('repeat', False))
         return message['action']
     return None

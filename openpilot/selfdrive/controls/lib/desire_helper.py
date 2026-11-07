@@ -21,6 +21,9 @@ from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
 from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S, LaneCrossing, LeverForcedTurn, LeverRequestWait, lever_maneuver
 
+from openpilot.selfdrive.controls.lib.desire_lib.turn_lifecycle import TurnLifecycle
+from openpilot.selfdrive.controls.lib.desire_lib.request import ManeuverRequest, RequestGuard
+
 # Without a model-detected crossing, a lever press this early in laneChangeFinishing is still the driver
 # re-lighting the lamp of the change that just crossed, not a request for the next one.
 STALK_QUEUE_GUARD_S = 0.3
@@ -59,6 +62,14 @@ class DesireHelper:
     self.turn_desire_state = False
     self.desire_disable_count = 0
     self.turn_disable_count = 0
+    self.turn_lifecycle = TurnLifecycle()
+    self._rejected_auto_request = None
+    self.request_guard = RequestGuard()
+    self.resolved_request = None
+    self._app_request = None
+    self._nav_observation = None
+    self._nav_generation = 0
+    self._driver_generation = 0
 
     # per-side states
     self.left = SideState("left")
@@ -156,15 +167,10 @@ class DesireHelper:
 
   def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState
-    orientation_rate = abs(modeldata.orientationRate.z[5])
-    orientation_rate_future = abs(modeldata.orientationRate.z[15])
-
     self.turn_desire_state = (desire_state[1] + desire_state[2]) > 0.1
-
-    if maneuver_type == "turn" and abs(carstate.steeringAngleDeg) > 80 and orientation_rate_future < orientation_rate:
-      self.turn_disable_count = int(10.0 / DT_MDL)
-    else:
-      self.turn_disable_count = max(0, self.turn_disable_count - 1)
+    # Falling predicted yaw at high steering angle is not evidence of completion.
+    # Completion is checked after request resolution, scoped to that request.
+    self.turn_disable_count = max(0, self.turn_disable_count - 1)
 
   # ─────────────────────────────────────────────
   # blinkers/ATC (원본 로직 유지, side 계산은 별개)
@@ -233,24 +239,36 @@ class DesireHelper:
       return BLINKER_RIGHT
     return BLINKER_NONE
 
-  def _update_atc_blinker(self, carrotMan, driver_blinker_state, remote=None):
+  def _update_atc_blinker(self, carrotMan, driver_blinker_state, remote=None, remote_request=None):
     atc_type = carrotMan.atcType
     atc_blinker_state = BLINKER_NONE
+    request = None
+    cue = atc_type if atc_type in ("turn left", "turn right", "fork left", "fork right", "atc left", "atc right") else None
+    if cue != self._nav_observation:
+      self._nav_generation += 1
+      self._nav_observation = cue
 
     # 유지 카운트는 DesireHelper에서 관리
     if self.tesla_auto_signals and self._auto_app_direction:
       atc_blinker_state = self._auto_app_direction
-    elif self.carrot_lane_change_count > 0:
-      atc_blinker_state = self.carrot_blinker_state
+      request = self._app_request
     elif not self.tesla_auto_signals and remote in ('laneLeft', 'laneRight'):
+      self._app_request = remote_request
       self.carrot_lane_change_count = int(0.2 / DT_MDL)
       self.carrot_blinker_state = BLINKER_LEFT if remote == 'laneLeft' else BLINKER_RIGHT
       atc_blinker_state = self.carrot_blinker_state
+      request = self._app_request
     elif not self.tesla_auto_signals and carrotMan.carrotCmdIndex != self.carrot_cmd_index_last and carrotMan.carrotCmd == "LANECHANGE":
       self.carrot_cmd_index_last = carrotMan.carrotCmdIndex
+      self._app_request = ManeuverRequest(BLINKER_LEFT if carrotMan.carrotArg == "LEFT" else BLINKER_RIGHT,
+        "app", ("app", carrotMan.carrotCmdIndex), True)
       self.carrot_lane_change_count = int(0.2 / DT_MDL)
       self.carrot_blinker_state = BLINKER_LEFT if carrotMan.carrotArg == "LEFT" else BLINKER_RIGHT
       atc_blinker_state = self.carrot_blinker_state
+      request = self._app_request
+    elif self.carrot_lane_change_count > 0:
+      atc_blinker_state = self.carrot_blinker_state
+      request = self._app_request
     elif atc_type in ("turn left", "turn right"):
       if self.atc_active != 2:
         atc_blinker_state = BLINKER_LEFT if atc_type == "turn left" else BLINKER_RIGHT
@@ -287,9 +305,11 @@ class DesireHelper:
       atc_desire_enabled = False
     self.atc_type = atc_type
 
-    return atc_blinker_state, atc_desire_enabled
+    if atc_blinker_state and request is None:
+      request = ManeuverRequest(atc_blinker_state, "navigation", ("navigation-observation", self._nav_generation), False)
+    return atc_blinker_state, atc_desire_enabled, request
 
-  def _update_auto_app_request(self, carstate, lateral_active, carrot_man, remote, driver_st, stalk_press):
+  def _update_auto_app_request(self, carstate, lateral_active, carrot_man, remote, driver_st, stalk_press, remote_request=None):
     new_command = carrot_man.carrotCmdIndex != self.carrot_cmd_index_last and carrot_man.carrotCmd == "LANECHANGE"
     if new_command:
       # Consume even rejected commands: recovery must never execute an old App action.
@@ -313,10 +333,13 @@ class DesireHelper:
         self.lane_change_state = LaneChangeState.off
         self.lane_change_direction = LaneChangeDirection.none
       self._auto_app_direction = BLINKER_NONE
+    self._pending_auto_request = (remote_request if remote else
+      ManeuverRequest(requested, "app", ("app", carrot_man.carrotCmdIndex), True)) if requested and permitted else None
     if (requested and permitted and not self._auto_app_direction and
         self.lane_change_state == LaneChangeState.off and not self.auto_signal_request_id):
       self._auto_app_direction, self._auto_app_wait = requested, 0.0
       self._auto_app_deadline = now + AUTO_APP_WAIT_S
+      self._app_request = remote_request if remote else ManeuverRequest(requested, "app", ("app", carrot_man.carrotCmdIndex), True)
 
   # ─────────────────────────────────────────────
   # per-side processing (핵심: 좌/우 모두 매 프레임 계산)
@@ -381,7 +404,7 @@ class DesireHelper:
   # main update
   # ─────────────────────────────────────────────
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *, indicator_valid=False, indicator_curvature=None,
-             assistant_valid=False):
+             assistant_valid=False, lifecycle_now=None):
     self.frame += 1
     self._update_params_periodic()
     if self.boundary_indicator_supported:
@@ -440,6 +463,10 @@ class DesireHelper:
       driver_enabled = driver_changed = False  # one-touch request timed out: ignore the lamp until it goes dark
     remote = self.bluetooth_commands.read(allowed=(lateral_active and carstate.canValid and
       not below_lane_change_speed and not trailer_maneuver_blocked))
+    remote_request = (ManeuverRequest(BLINKER_LEFT if remote == "laneLeft" else BLINKER_RIGHT,
+      "bluetooth", ("bluetooth", getattr(self.bluetooth_commands, "accepted_id", None)),
+      getattr(self.bluetooth_commands, "accepted_id", None) is not None)
+      if remote in ("laneLeft", "laneRight") else None)
     # Separate authenticated voice intent; never synthesize physical remote events,
     # steering torque or turn-signal acknowledgement. All normal FSM gates remain.
     assistant_direction = None
@@ -485,13 +512,48 @@ class DesireHelper:
           self.lane_change_direction = LaneChangeDirection.none
       if assistant_direction:
         remote = 'laneLeft' if assistant_direction == 'left' else 'laneRight'
+        remote_request = ManeuverRequest(BLINKER_LEFT if assistant_direction == 'left' else BLINKER_RIGHT,
+          'voice', ('voice', self.assistant_lane.active['id']), True)
     except (OSError, ValueError, TypeError, KeyError):
       # A failed intent/status channel cannot take down the model loop.
       assistant_direction = None
     if self.tesla_auto_signals:
-      self._update_auto_app_request(carstate, lateral_active, carrotMan, remote, driver_st, stalk_press)
-    atc_st, atc_enabled = self._update_atc_blinker(carrotMan, driver_st, remote)
+      self._update_auto_app_request(carstate, lateral_active, carrotMan, remote, driver_st, stalk_press, remote_request)
+    atc_st, atc_enabled, auto_request = self._update_atc_blinker(carrotMan, driver_st, remote, remote_request)
 
+    # Driver intent always wins, including a genuine reversing LC. Curvature is
+    # never an intent signal. Stalk counts identify fresh same-side lever input;
+    # lamps without a press only provide an observed local episode.
+    if driver_changed or stalk_press:
+      self._driver_generation += 1
+    if self.tesla_auto_signals and getattr(self, '_pending_auto_request', None) is not None:
+      auto_request = self._pending_auto_request
+    request = (ManeuverRequest(driver_st, 'driver', ('driver-observation', self._driver_generation))
+               if driver_enabled else auto_request)
+    active_direction = int(self.turn_direction) if self.turn_direction != TurnDirection.none else int(self.lane_change_direction)
+    executing = (self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing) or
+                 (self.turn_direction != TurnDirection.none and not self.turn_lifecycle.completed and not self.turn_lifecycle.cancelled))
+    admitted = self.request_guard.resolve(request, executing=executing, active_direction=active_direction, driver=driver_enabled)
+    rejected = request is not None and admitted is None
+    self.request_diagnostic = self.request_guard.reason
+    self._rejected_auto_request = self.request_guard.rejected
+    request_replaced = admitted is not None and (self.resolved_request is None or admitted.episode != self.resolved_request.episode)
+    self.resolved_request = admitted
+    if rejected:
+      # A conflicting automatic cue cannot silently reverse an executing turn.
+      # Cancel metadata, never force/hold steering, and consume this observed
+      # episode until replacement/withdrawal. Identityless nav has no side latch:
+      # after execution ends the next observation is reconsidered normally.
+      atc_enabled = False
+      if self.turn_direction != TurnDirection.none:
+        self.turn_lifecycle.cancelled = True
+        self.turn_lifecycle.reason = 'opposite_request'
+        self.turn_direction = TurnDirection.none
+        self.lane_change_direction = LaneChangeDirection.none
+      # LC retains its established direction and ordinary finishing/driver
+      # cancellation gates; the incompatible input is rejected, not queued.
+      if request.origin == 'voice' and self.assistant_lane.active:
+        self.assistant_lane.publish('rejected', 'opposite_executing_maneuver')
     desire_enabled = driver_enabled or atc_enabled
     blinker_state = driver_st if driver_enabled else atc_st
 
@@ -599,10 +661,24 @@ class DesireHelper:
       elif self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
         self.maneuver_type = new_type
 
+      turn_request = (desire_enabled and self.maneuver_type == 'turn' and self.enable_turn_desires)
+      turn_completed = self.turn_lifecycle.update(
+        blinker_state if turn_request else BLINKER_NONE,
+        getattr(carstate, 'steeringAngleDeg', float('nan')), v_ego,
+        list(getattr(getattr(modeldata, 'orientationRate', None), 'z', ())),
+        list(getattr(getattr(modeldata, 'orientation', None), 'z', ())),
+        indicator_valid and carstate.canValid, DT_MDL,
+        now=lifecycle_now, frame_id=getattr(modeldata, 'frameId', None),
+        timestamp_eof=getattr(modeldata, 'timestampEof', None),
+        episode=admitted.episode if admitted is not None else None,
+        cancel=carstate.steeringPressed and ((blinker_state == BLINKER_LEFT and carstate.steeringTorque < 0) or
+                                          (blinker_state == BLINKER_RIGHT and carstate.steeringTorque > 0)))
+
       # ─ TURN mode ─
       if desire_enabled and self.maneuver_type == "turn" and self.enable_turn_desires:
         self.lane_change_state = LaneChangeState.off
-        if self.turn_disable_count > 0:
+        if self.turn_disable_count > 0 or turn_completed:
+          self.desireLog = 'TURN_LIFECYCLE:' + self.turn_lifecycle.reason
           self.turn_direction = TurnDirection.none
           self.lane_change_direction = LaneChangeDirection.none
         else:
@@ -616,7 +692,7 @@ class DesireHelper:
         if self.lane_change_state == LaneChangeState.off:
           # A lever press while the lamp is still flashing has no lamp edge but is still a fresh request.
           driver_desire_started = driver_enabled and (driver_changed or stalk_press == blinker_state)
-          if desire_enabled and (not self.prev_desire_enabled or driver_desire_started) and \
+          if desire_enabled and (not self.prev_desire_enabled or driver_desire_started or (request_replaced and admitted.owned)) and \
              not below_lane_change_speed and side is not None:
             self.lane_change_state = LaneChangeState.preLaneChange
             self.lane_change_ll_prob = 1.0
@@ -744,6 +820,16 @@ class DesireHelper:
             else:
               self.lane_change_state = LaneChangeState.off
 
+    if not lateral_active or trailer_maneuver_blocked or self.desire_disable_count > 0 or self.maneuver_type != 'turn':
+      self.turn_lifecycle.reset()
+    if not lateral_active or trailer_maneuver_blocked or self.desire_disable_count > 0:
+      self.request_guard.reset()
+
+    if self.turn_direction != TurnDirection.none or self.lane_change_state in (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing):
+      self.request_guard.executing(admitted)
+    else:
+      self.request_guard.owner = None
+
     # timer
     if self.lane_change_state in (LaneChangeState.off, LaneChangeState.preLaneChange):
       self.lane_change_timer = 0.0
@@ -757,9 +843,11 @@ class DesireHelper:
     self.prev_desire_enabled = desire_enabled
 
     # 반대 방향 토크로 cancel (기존 유지)
+    cancel_direction = (int(self.lane_change_direction) if self.lane_change_state in
+      (LaneChangeState.laneChangeStarting, LaneChangeState.laneChangeFinishing) else blinker_state)
     steering_pressed_cancel = carstate.steeringPressed and (
-      (carstate.steeringTorque < 0 and blinker_state == BLINKER_LEFT) or
-      (carstate.steeringTorque > 0 and blinker_state == BLINKER_RIGHT)
+      (carstate.steeringTorque < 0 and cancel_direction == BLINKER_LEFT) or
+      (carstate.steeringTorque > 0 and cancel_direction == BLINKER_RIGHT)
     )
     if steering_pressed_cancel and self.lane_change_state != LaneChangeState.off:
       self.lane_change_direction = LaneChangeDirection.none

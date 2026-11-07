@@ -583,7 +583,7 @@ def main(demo=False):
         sm.valid[k] and sm.alive[k] and 0 <= indicator_now-sm.recv_time[k] < .35
         for k in ('carState', 'carControl'))
       DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm['carrotMan'], sm['radarState'],
-                indicator_valid=indicator_valid, indicator_curvature=sm['carControl'].actuators.curvature,
+                lifecycle_now=indicator_now, indicator_valid=indicator_valid, indicator_curvature=sm['carControl'].actuators.curvature,
                 assistant_valid=indicator_valid and sm.valid['radarState'] and sm.alive['radarState'] and
                 0 <= indicator_now-sm.recv_time['radarState'] < .35)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state

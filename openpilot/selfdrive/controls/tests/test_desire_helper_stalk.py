@@ -42,16 +42,24 @@ class TestDesireHelperStalkRequest:
       side.lane_exist_count.counter = 10
     self.carrot_man = SimpleNamespace(atcType="", carrotCmdIndex=0, carrotCmd="", carrotArg="")
     self.left_count = 0
+    self.camera_frame = 0
+    self.camera_now = 100.
 
   def update(self, left_blinker=True, lane_change_prob=0.5, press=False, counters=True, lever=0, v_kph=90.0, lines=None):
     if press:
       self.left_count = (self.left_count + 1) % 256
     car = SimpleNamespace(canValid=True, leftBlinker=left_blinker, rightBlinker=False, vEgo=v_kph / 3.6, aEgo=0.0,
-                          trailerConnected=False, steeringTorque=0.0, steeringPressed=False, blinkerLever=lever)
+                          trailerConnected=False, steeringTorque=0.0, steeringPressed=False, blinkerLever=lever, steeringAngleDeg=0.)
     if counters:
       car.leftBlinkerStalkCount, car.rightBlinkerStalkCount = self.left_count, 0
     model = SimpleNamespace(laneLines=[SimpleNamespace(y=[y]) for y in (-5.0, *lines, 5.0)]) if lines else SimpleNamespace()
-    self.helper.update(car, model, True, lane_change_prob, self.carrot_man, SimpleNamespace())
+    self.camera_frame += 1
+    self.camera_now += DT_MDL
+    model.frameId, model.timestampEof = self.camera_frame, int((self.camera_now-.001)*1e9)
+    model.orientationRate = SimpleNamespace(z=[0.]*33)
+    model.orientation = SimpleNamespace(z=[0.]*33)
+    self.helper.update(car, model, True, lane_change_prob, self.carrot_man, SimpleNamespace(),
+                       indicator_valid=True, lifecycle_now=self.camera_now)
     return self.helper.lane_change_state
 
   def start_and_cross(self, counters=True):
