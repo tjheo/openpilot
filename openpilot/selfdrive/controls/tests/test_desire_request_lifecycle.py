@@ -254,6 +254,156 @@ class Production(unittest.TestCase):
     self.assertEqual(self.h.request_diagnostic,'driver_precedence')
     self.assertIsNone(self.h.request_guard.rejected)
 
+  def held_driver(self, direction):
+    self.c.leftBlinker = direction == 1
+    self.c.rightBlinker = direction == 2
+    self.c.vEgo = 0.
+    self.c.steeringAngleDeg = 0.
+    self.cm.atcType = 'none'
+    self.m.meta.desireState = [0., .2 if direction == 1 else 0., .2 if direction == 2 else 0., 0., 0., 0., 0., 0.]
+    return log.Desire.turnLeft if direction == 1 else log.Desire.turnRight
+
+  def wait_and_depart(self, direction, seconds, *, late=False):
+    expected = self.held_driver(direction)
+    for _ in range(int(seconds / .05)):
+      self.step(active=not late)
+    if not late:
+      self.assertEqual(self.h.desire, expected)
+      self.assertIsNone(self.h.turn_lifecycle.execution_since)
+      self.assertFalse(self.h.turn_lifecycle.cancelled)
+    self.c.vEgo = 5.
+    for _ in range(12): self.step(angle=60. if direction == 1 else -60.)
+    self.assertEqual(self.h.desire, expected)
+    self.assertEqual(self.h.resolved_request.origin, 'driver')
+    self.assertIsNotNone(self.h.turn_lifecycle.execution_since)
+    self.assertGreater(self.h.turn_lifecycle.execution_since, 100. + seconds)
+
+  def test_left_held_lamp_33_seconds_then_departure(self):
+    self.wait_and_depart(1, 33.)
+
+  def test_right_held_lamp_33_seconds_then_departure(self):
+    self.wait_and_depart(2, 33.)
+
+  def test_left_held_lamp_61_seconds_then_departure(self):
+    self.wait_and_depart(1, 61.)
+
+  def test_right_held_lamp_61_seconds_then_departure(self):
+    self.wait_and_depart(2, 61.)
+
+  def test_left_held_lamp_121_seconds_then_departure(self):
+    self.wait_and_depart(1, 121.)
+
+  def test_right_held_lamp_121_seconds_then_departure(self):
+    self.wait_and_depart(2, 121.)
+
+  def test_lateral_activation_late_in_held_lamp_wait(self):
+    self.held_driver(1)
+    for _ in range(1300): self.step(active=False)
+    # Activation itself is not initiation; an additional >30 s active wait
+    # must retain the same physical signal with no new stalk press.
+    for _ in range(660): self.step()
+    self.assertIsNone(self.h.turn_lifecycle.execution_since)
+    self.assertEqual(self.h.desire, log.Desire.turnLeft)
+    self.c.vEgo = 5.
+    self.initiate_with_angle()
+    self.assertEqual(self.h.desire, log.Desire.turnLeft)
+
+  def test_initiated_stopped_turn_deadline_is_not_paused(self):
+    self.initiate()
+    start = self.h.turn_lifecycle.execution_since
+    self.c.vEgo = 0.
+    for _ in range(650): self.step(angle=0., rates=0.)
+    self.assertFalse(self.h.turn_lifecycle.completed)
+    self.assertEqual(self.h.turn_lifecycle.reason, 'deadline')
+    self.assertEqual(self.h.turn_lifecycle.execution_since, start)
+    self.c.vEgo = 5.
+    for _ in range(12): self.step(angle=60.)
+    self.assertEqual(self.h.desire, log.Desire.none)
+
+  def test_preinitiation_stale_missing_recovery_keeps_freshness_gate(self):
+    self.held_driver(1)
+    for _ in range(660): self.step()
+    episode = self.h.turn_lifecycle.episode
+    for kw in ({'frozen':True}, {'missing':True}, {'valid':False}, {'clock':False}, {'eof_age':1.}):
+      for _ in range(12): self.step(**kw)
+      self.assertEqual(self.h.desire, log.Desire.none)
+      self.assertFalse(self.h.turn_lifecycle.completed)
+      self.assertFalse(self.h.turn_lifecycle.cancelled)
+      self.assertIsNone(self.h.turn_lifecycle.execution_since)
+      # Missing clock leaves last_now unchanged; first recovery after its
+      # >350 ms gap is still suppressed. Only the next fresh interval resumes.
+      self.step()
+      self.step()
+      self.assertEqual(self.h.desire, log.Desire.turnLeft)
+      self.assertEqual(self.h.turn_lifecycle.episode, episode)
+    self.c.vEgo = 5.
+    self.initiate_with_angle()
+
+  def test_initiated_missing_stale_recovery_never_restarts_deadline(self):
+    self.initiate()
+    start = self.h.turn_lifecycle.execution_since
+    for kw in ({'frozen':True}, {'missing':True}, {'valid':False}):
+      for _ in range(12): self.step(**kw)
+      self.assertEqual(self.h.desire, log.Desire.none)
+      self.assertEqual(self.h.turn_lifecycle.started, 0.)
+      self.assertEqual(self.h.turn_lifecycle.execution_since, start)
+      self.initiate()
+      self.assertEqual(self.h.turn_lifecycle.execution_since, start)
+    for _ in range(650): self.step(missing=True)
+    self.assertEqual(self.h.turn_lifecycle.reason, 'deadline')
+    for _ in range(12): self.step()
+    self.assertEqual(self.h.desire, log.Desire.none)
+
+  def test_automatic_preparation_keeps_separate_request_deadline(self):
+    self.c.leftBlinker = False
+    self.c.vEgo = 0.
+    self.c.steeringAngleDeg = 0.
+    for _ in range(660): self.step()
+    self.assertEqual(self.h.resolved_request.origin, 'navigation')
+    self.assertIsNone(self.h.turn_lifecycle.execution_since)
+    self.assertEqual(self.h.turn_lifecycle.reason, 'deadline')
+    self.assertEqual(self.h.desire, log.Desire.none)
+
+  def test_automatic_execution_does_not_extend_preexisting_request_cap(self):
+    self.c.leftBlinker = False
+    self.c.vEgo = 0.
+    self.c.steeringAngleDeg = 0.
+    for _ in range(500): self.step()
+    self.c.vEgo = 5.
+    self.initiate_with_angle()
+    self.assertIsNotNone(self.h.turn_lifecycle.execution_since)
+    for _ in range(120): self.step()
+    self.assertEqual(self.h.turn_lifecycle.reason, 'deadline')
+
+  def test_waiting_driver_cancel_and_replacement(self):
+    self.held_driver(1)
+    for _ in range(660): self.step()
+    self.c.steeringPressed = True
+    self.c.steeringTorque = -1.
+    self.step()
+    self.assertTrue(self.h.turn_lifecycle.cancelled)
+    self.c.steeringPressed = False
+    for _ in range(12): self.step()
+    self.assertEqual(self.h.desire, log.Desire.none)
+    self.c.leftBlinkerStalkCount += 1
+    self.step()
+    self.assertEqual(self.h.desire, log.Desire.turnLeft)
+    self.assertIsNone(self.h.turn_lifecycle.execution_since)
+
+  def test_stationary_steering_or_moving_straight_is_not_initiation(self):
+    self.held_driver(1)
+    for _ in range(660): self.step(angle=60.)
+    self.assertIsNone(self.h.turn_lifecycle.execution_since)
+    self.c.vEgo = 5.
+    for _ in range(660): self.step(angle=0.)
+    self.assertIsNone(self.h.turn_lifecycle.execution_since)
+    self.assertEqual(self.h.desire, log.Desire.turnLeft)
+    self.initiate_with_angle()
+
+  def initiate_with_angle(self):
+    for _ in range(12): self.step(angle=60.)
+    self.assertIsNotNone(self.h.turn_lifecycle.execution_since)
+
   def test_reset_boundaries(self):
     for mode in ('trailer','lateral','disable','withdraw'):
       self.tearDown(); self.setUp(); self.initiate()

@@ -21,6 +21,7 @@ class TurnLifecycle:
     self.completed = False
     self.cancelled = False
     self.request_since = None
+    self.execution_since = None
     self.last_now = self.last_eof = self.last_frame = None
     self.reason = 'idle'
 
@@ -28,7 +29,8 @@ class TurnLifecycle:
     self.peak = self.started = self.settled = 0.0
 
   def update(self, direction, angle, speed, rates, headings, valid, dt,
-             *, now=None, frame_id=None, timestamp_eof=None, cancel=False, episode=None):
+             *, now=None, frame_id=None, timestamp_eof=None, cancel=False, episode=None,
+             driver_request=False):
     if direction not in (1, 2):
       self.reset()
       return False
@@ -49,7 +51,11 @@ class TurnLifecycle:
       return True
     if self.request_since is None:
       self.request_since = now
-    if now - self.request_since >= self.MAX_DURATION:
+    # Driver lamps may remain held throughout a traffic-light wait. Only
+    # observed fresh moving steering initiation starts their execution cap.
+    # Automatic preparation retains its separate bounded request lifetime.
+    deadline_since = self.execution_since if driver_request else self.request_since
+    if deadline_since is not None and now - deadline_since >= self.MAX_DURATION:
       self.cancelled = True
       self.reason = 'deadline'
       return True
@@ -82,6 +88,10 @@ class TurnLifecycle:
       self.peak = max(self.peak, abs(angle))
     elif self.started < 0.3:
       self.started = 0.0
+    if self.started >= 0.3 and self.execution_since is None:
+      self.execution_since = now
+    # Geometry discontinuity clears initiation/settle credit, not execution
+    # lifetime: a stop or stale-frame recovery must never restart the cap.
     settled = (self.started >= 0.3 and speed > 1.0 and
                abs(angle) <= min(20.0, self.peak * 0.25) and
                max(abs(x) for x in rates[:16]) < 0.05 and

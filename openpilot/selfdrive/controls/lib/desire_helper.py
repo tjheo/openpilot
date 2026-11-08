@@ -671,6 +671,7 @@ class DesireHelper:
         now=lifecycle_now, frame_id=getattr(modeldata, 'frameId', None),
         timestamp_eof=getattr(modeldata, 'timestampEof', None),
         episode=admitted.episode if admitted is not None else None,
+        driver_request=admitted is not None and admitted.origin == 'driver',
         cancel=carstate.steeringPressed and ((blinker_state == BLINKER_LEFT and carstate.steeringTorque < 0) or
                                           (blinker_state == BLINKER_RIGHT and carstate.steeringTorque > 0)))
 
