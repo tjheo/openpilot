@@ -24,6 +24,7 @@ except ModuleNotFoundError:
     def get_int(self, key): return int(self.values.get(key, 0))
     def get_float(self, key): return float(self.values.get(key, 0))
     def get_bool(self, key): return bool(self.values.get(key, False))
+    def put_int(self, key, value): self.values[key] = int(value)
   params.Params = Params
   sys.modules[params.__name__] = params
 from openpilot.cereal import car, log, custom

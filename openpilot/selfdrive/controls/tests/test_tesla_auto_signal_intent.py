@@ -94,7 +94,22 @@ def step(f, lamp=False, owned=0, driver=0, active=True, prob=.5, valid=True, tra
           turnSignalDriverValid=True, turnSignalDriverDirection=driver, autoTurnSignalDirection=owned,
           autoTurnSignalReadyRequestId=f.helper.auto_signal_request_id)
   cs.__dict__.update(state_overrides)
-  f.helper.update(cs, model or NS(), active, prob, f.carrot_man, NS(), turn_hold_allowed=turn_hold_allowed, turn_pose=turn_pose)
+  # Fork turn lifecycle requires a fresh camera observation and the matching clock.
+  f.camera_frame += 1
+  f.camera_now = getattr(f, "turn_clock", f.camera_now + .05)
+  md = model or NS()
+  was_reader = type(md).__name__ == "_DynamicStructReader"
+  if was_reader:
+    md = md.as_builder()
+  md.frameId, md.timestampEof = f.camera_frame, int((f.camera_now - .001) * 1e9)
+  if not hasattr(md, "orientationRate"):
+    md.orientationRate = NS(z=[0.] * 33)
+  if not hasattr(md, "orientation"):
+    md.orientation = NS(z=[0.] * 33)
+  if was_reader:
+    md = md.as_reader()
+  f.helper.update(cs, md, active, prob, f.carrot_man, NS(), turn_hold_allowed=turn_hold_allowed,
+                  turn_pose=turn_pose, indicator_valid=valid, lifecycle_now=f.camera_now)
   return f.helper
 
 
@@ -876,7 +891,7 @@ def test_real_turn_disable_and_stopped_lateral_reset_do_not_complete_lamps(setup
   model.orientationRate.z[15] = sign * .2
   for i in range(10):
     turn_step(setup, yaw=-sign * (i + 1) * .05, model=model, speed=5., angle=sign * 100.)
-    assert h.turn_disable_count == 200  # Original steering behavior is unchanged.
+    assert h.turn_disable_count == 0  # Fork removed premature >80-degree suppression.
     assert h.auto_signal_request_id == request
   for _ in range(30):
     h = turn_step(setup, yaw=-sign * .5, model=model, active=False, speed=0., angle=0.,
