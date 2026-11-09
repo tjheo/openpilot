@@ -4,6 +4,18 @@ msgstr ""
 "Language: ko\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "BRAKE! Tesla CAN Red Light"
+msgstr "제동하세요! Tesla CAN 빨간불"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Stopping Distance May Be Insufficient"
+msgstr "정지 거리가 부족할 수 있습니다"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Tesla CAN Traffic Signal Lost or Inconsistent"
+msgstr "Tesla CAN 신호등 정보 끊김 또는 불일치"
+
 #: openpilot/selfdrive/ui/layouts/settings/device.py
 msgid " Steering torque response calibration is complete."
 msgstr " 스티어링 토크 응답 보정이 완료되었습니다."
@@ -1544,3 +1556,18 @@ msgstr "SVX 실시간 RPM 폰 전송"
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "While driving, send the engine RPM (read-only) to the SVX virtual exhaust phone app on the same Wi-Fi or tailnet. Listens on TCP port 47816 (param SvxLivePort) for phones with a private LAN or tailnet address. There is no key: anyone on that network can read the RPM. Nothing the phone sends can control the car. Off by default."
 msgstr "주행 중 엔진 RPM을 읽기 전용으로 같은 Wi-Fi 또는 테일넷의 SVX 가상배기음 폰 앱에 보냅니다. 사설 LAN·테일넷 주소의 폰만 TCP 47816 포트(파라미터 SvxLivePort)로 접속할 수 있습니다. 키가 없으므로 같은 네트워크의 누구나 RPM을 읽을 수 있습니다. 폰이 보내는 어떤 내용으로도 차량을 제어할 수 없습니다. 기본값은 꺼짐입니다."
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Controller Fault"
+msgstr "CAN 제어기 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "CAN Controller Fault: Check Connections"
+msgstr "CAN 제어기 오류: 연결 상태를 확인하세요"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Front Safety System Fault"
+msgstr "전방 안전 시스템 오류"
+
+#: openpilot/selfdrive/selfdrived/events.py
+msgid "Front Safety System Fault: Check Vehicle"
+msgstr "전방 안전 시스템 오류: 차량을 점검하세요"
