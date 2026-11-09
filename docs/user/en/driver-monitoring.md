@@ -102,3 +102,7 @@ This sound policy applies to modes 0 and 1 with camera or interaction monitoring
 SoftHold pauses driver assessment. The same pause applies during a fresh, confirmed signal stop or stop behind a stationary lead with active longitudinal control, standstill, raw and filtered speed below 0.1 m/s, and no accelerator input. A lead stop additionally requires a valid stationary lead within 40 m.
 
 The camera continues running; accumulated warnings and lockout are not cleared. Departure, a green signal, lead movement, or stale/invalid inputs resumes assessment on the next update. Stopping alone does not qualify.
+
+## Vehicle-controller faults are separate from driver monitoring
+
+Confirmed persistent CAN-controller errors or recurring OEM front-safety-system faults on supported vehicles produce separate vehicle alerts and inhibit lateral and longitudinal control, including Always Lateral. These are not driver-attention warnings or DM lockout; changing a DM setting does not clear them. Check connections and vehicle condition, then follow normal engagement conditions after the fault clears.
