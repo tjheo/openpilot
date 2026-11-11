@@ -14,6 +14,7 @@ from . import (
   mapbox_tokens,
   navigation,
   params,
+  radar_check,
   screenrecord,
   settings,
   setting_favorites,
@@ -49,6 +50,7 @@ def register_all(app: web.Application) -> None:
   ws.register(app)
   settings.register(app)
   params.register(app)
+  radar_check.register(app)
   setting_favorites.register(app)
   setting_popular_values.register(app)
   setting_profiles.register(app)

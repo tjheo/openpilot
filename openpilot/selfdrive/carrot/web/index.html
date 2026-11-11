@@ -326,6 +326,28 @@
           <button id="btnToolsAssistant" class="btn" type="button" aria-haspopup="dialog"><span aria-hidden="true">&#9881;</span> <span id="toolsAssistantLabel">ChatGPT 설정 도우미</span></button>
         </div>
 
+        <section class="section" id="radarCheckPanel" aria-labelledby="radarCheckTitle">
+          <h3 class="section-title" id="radarCheckTitle">레이더 수신 진단 (현대/기아 legacy CAN)</h3>
+          <p class="muted">안전한 곳에서 P 기어·정차·시동 ON. 10초 수신 전용 검사이며 CAN 송신·설정 변경은 하지 않습니다.</p>
+          <label>예상 RX 버스
+            <select id="radarCheckBus" class="smallBtn">
+              <option value="auto">자동 (차량 설정 참고)</option>
+              <option value="0">bus 0 — 순정 SCC</option>
+              <option value="1">bus 1</option>
+              <option value="2">bus 2 — 카메라 SCC 개조</option>
+            </select>
+          </label>
+          <label>검사 모드
+            <select id="radarCheckMode" class="smallBtn">
+              <option value="scc">SCC11 + SCC12 (50 Hz)</option>
+              <option value="raw">legacy raw tracks (20 Hz, 0x500–0x53F)</option>
+            </select>
+          </label>
+          <button id="btnRadarCheck" class="btn" type="button">정차 레이더 수신 검사</button>
+          <p class="muted">Raw 모드에서 SCC 신호가 꺼져도 실패가 아니며, 객체가 0개여도 수신 검사는 가능합니다. CAN FD는 지원하지 않습니다.</p>
+          <pre id="radarCheckResult" aria-live="polite" style="white-space:pre-wrap;overflow-wrap:anywhere">통신 수신 확인이며 배선 전체/가감속 보증 아님.</pre>
+        </section>
+
         <div class="section tools-group is-open" data-tools-group="git">
           <button class="tools-group__toggle" type="button" aria-expanded="true" aria-controls="toolsGroupBodyGit">
             <span id="gitCommandsTitle" class="section-title tools-group__title">Git Commands</span>
@@ -981,6 +1003,7 @@
   <script src="/js/pages/setting_device.js"></script>
   <script src="/js/realtime/web_sound.js"></script>
   <script src="/js/generated/tools.js"></script>
+  <script src="/js/pages/radar_check.js"></script>
   <script src="/js/pages/branch.js"></script>
   <script src="/js/generated/logs.js"></script>
   <script src="/js/vendor/xterm-addon-shim.js?v=1"></script>

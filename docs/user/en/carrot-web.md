@@ -252,3 +252,11 @@ are cleaned up automatically while offroad. A running retired model remains prot
 until the next boot selects the default and delivery switches the installed active model.
 Jetson cleanup waits for an offroad connection and preserves an ONNX used by any available
 model. Only the selected model is loaded into GPU memory.
+
+### Stationary radar receive check
+
+After updating the device code and refreshing Carrot Web, open **Tools > 레이더 수신 진단 > 정차 레이더 수신 검사**. The Korean-labelled diagnostic is for Hyundai/Kia legacy CAN, not CAN FD. It runs a bounded 10-second receive-only check; fresh valid standstill, speed at most 0.1 m/s, Park gear and ignition ON are required throughout. Missing/stale state or motion aborts the check as inconclusive.
+
+Select automatic expected RX bus from CarParams (typically stock bus 0 or camera-SCC bus 2 on a single Panda), or explicitly choose bus 0, 1 or 2. Raw auto selects legacy track bus 1, matching the current radar parser. Configuration is context, not evidence of wiring; offset buses outside 0–2 are not supported. SCC mode checks SCC11/SCC12 at 50 Hz with rolling counters and SCC12 nibble-sum checksum. SCC11 checksum is not checked. Optional legacy raw mode observes 0x500–0x53F at 20 Hz without requiring all 64 slots or nonzero objects; some raw modes disable SCC, so choose the appropriate mode.
+
+Results distinguish stable RX, no signal on the selected bus, and inconclusive. No fresh CAN is never a zero-Hz pass. This does not transmit CAN/UDS, initialize ECUs, activate cruise, change Params, or export raw CAN/VIN/GPS/video. RX verification does not guarantee the whole harness or acceleration/braking operation; forwarded RX does not prove the originating ECU.
