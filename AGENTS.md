@@ -1,5 +1,160 @@
 # Repository memory
 
+- 2026-11-12: Owner requests SD-only automatic Super firmware provisioning.
+  Official NVIDIA capsule path is available. R2 excluded /opt/ota_package and
+  mounted EFI read-only; restore official36.4.7 Super capsule from pinned deb
+  b7600d3c65be858e8de2b46764221e128f472480fe801b411072d874326adfc2,
+  capsule50796752B SHA256fc07e537329561d520052d2e45a09c516ed430369078224971ed70f5bbe1ec2f.
+  Image-only bootstrap validates P3767-0005/P3768, bootable36.x<=36.4.7,
+  root-SD/EFI/DATA and NVIDIA spec. Stage via vendor capsule helper, temporarily
+  remount EFI rw, verify bytes/UEFI request, automatic reboot before GPU users.
+  Device-bound durable DATA transaction stops repeated failed updates. Next
+  boot verifies capsule status1, changed slot,36.4.7,Super DT and MAXN_SUPER GPU
+  ceiling before inference. Already-matching boards only verify power. Keep
+  vendor spec discovery/boot verification; serialize its automatic capsule work.
+  USB boot screen reports progress/failures. APP remains read-only. Existing
+  GitPull does not install image provisioning. Pre36 firmware unable to boot
+  this SD still requires NVIDIA's prerequisite path; no arbitrary downgrade.
+  Final review found fresh-image DATA admission still requiring last-loaded.json
+  after the builder removed reference engines. Withhold the initial0.6 package;
+  add an explicit preloaded-model marker and installed-helper chroot admission
+  check, preserving legacy completed-runtime checks. Final builder393b98d733
+  includes codea4a2c898d5 and EFI dirty-bit repair2b87210c09. ARM image43209977486,
+  integration43209977709/full-build43209977573/eGPU43209977711/docs43209977884 pass.
+  Native provisioning/storage34pass/1skip; Windows focused39pass/7skip. Actual
+  Windows ZIP CRC/bundled-Python preparation matches raw40GiB SHA256
+  b2645ce45a6e20a6932ae11338dd9cbf95af52309ebaf8e3a0131a962249886f.
+  Compressed8537584278B SHA25634312ff6d9ea216a947f725b80059cc140952992d0282391e50c6dea6796d36c;
+  ZIP8562284725B SHA256259fe2b1724256806b4254174c2906f0c6d1a5f863b2ec7dd0730a1d0f5e090c.
+  Independent image readback confirms installed sources/capsule/consumer ordering,
+  fresh DATA marker and clean EFI with66012160B free. Release
+  jetson-super-auto-sd-20261112/v0.6.0-super-auto-preview is a physical-boot
+  unverified preview; older v0.5 warns about its first DATA admission issue.
+  Physical QSPI update/boot/power interruption and reporter39ms improvement
+  unverified. No live device writes. Evidence and publication readbacks in
+  .analysis/scratch/2026-11-12-super-bootstrap/final.
+
+- 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0d/13..15 on d37a6d30 confirms
+  host5a2784cc applied but174 samples all super_profile_missing,15W, GPU624.75MHz,
+  EMC2133MHz. Device-tree p3767-0005 lacks Super suffix; NVIDIA nvpower.sh
+  relinks the public R2 image's existing Super profile to ordinary15W/7W.
+  Orin Nano8GB hardware supports Super; exact QSPI version is unrecorded.
+  Model56.722ms/all2873over50,727 frame gaps exactly match invalid odometry;
+  host execution/completion38.895ms, CPU core means4.9..22%,60..61C/no throttle,
+  no USB timeout/disconnect in these segments. CruiseMismatch also present;
+  do not infer it shares this cause. Add explicit super_firmware_required.
+  N16 host0cb67d46cc4ac448326cc9b272ebfebdc6fde797 signed/published67195643B,
+  SHA256 ed22268f318a9db35de78049b0bc88ebfb09df00c9c661c558bb32e23cf98ccd.
+  HTTPS/full hash/signature verified, Jetson43177120838 and full-build CI pass.
+  SD build43177492508 on ARM64 succeeds with signed N16 in factory/DATA,
+  matching ONNX preloaded and board-specific TensorRT engine built first boot.
+  Raw40GiB SHA256 8da67d9b1eff6d7843a26c825fac307be82201e08e55549b76332d77f8f0d196;
+  compressed8505195694B SHA25629617d9bb36c54768bd8b69685b587efc7520dbb6a57191555b6061048539940.
+  Imports/model hashes/privacy/fsck/GPT/systemd graph pass. Physical boot and
+  firmware repair remain unverified. No live-device or QSPI writes. Evidence
+  .analysis/scratch/2026-11-12-ioniq5-route0d. SD v0.5.0-super-preview published
+  on NAS; full NAS readback hashes and public HTTPS installer/image checks pass.
+  Windows ZIP8529895780B SHA2566c05b5c05e53922663d58529696ff31f683aec1602121873e2da3509e0a729c5.
+  Actual ZIP extraction/CRC and bundled Python preparation in Korean/space path
+  reproduce the raw image hash. Physical SD write/boot/performance unverified.
+
+- 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0b/12..14 on ffa5723e has174
+  fresh host samples, all15W/GPU624.75MHz/EMC2133MHz,53..57C,no thermal throttle,
+  CPU core means5..23%,5.2GiB available. Model56.864ms and724 frame gaps exactly
+  match invalid odometry; no USB disconnect/timeout evidence in these segments.
+  Add named NVIDIA MAXN_SUPER startup selection, once-per-boot locking, mode/
+  GPU-ceiling verification and explicit missing-profile/reboot/firmware failures
+  through host health and route logs. New image units precede Xorg/HUD/inference
+  and update-apply candidate GPU validation;
+  existing runtime attempts setup before backend imports. NVIDIA reboot prompts
+  are declined. Never infer full Super operation from the name alone or flash
+  QSPI blindly. N16 host5a2784cc2dc920cf54d2e40e7e4d9dad1c56b955 signed/published,
+  67193439B/SHA256 4b48fd829c6aa1aa12422404090eb7e5f87370e8187e3ce99636be2a30166c94.
+  HTTPS/signature verified; Linux CI43166733955 main2502pass56skip plus other
+  groups and Windows installer pass. Other model host pins unchanged. Public SD
+  image binary not rebuilt; image-generation code includes the new service.
+  Reporter firmware/profile inventory, physical boot and latency cure await new
+  device evidence. An old protected image can still require an early-boot patch
+  if NVIDIA rejects its late mode switch. Private scratch2026-11-12-ioniq5-jetson
+  and2026-11-12-jetson-auto-super preserve evidence. Normal GitPull/full reboot.
+
+- 2026-11-11: Restore Long Kp/Ki/Kf for identified Ray EV CommaPedal with
+  CC_ONLY_CAR/PEDAL_INTERCEPTOR and OP longitudinal. Shared capability gates
+  catalog/snapshot and actual speed-PID tuning, startup plus ~1s refresh.
+  Ki title corrected to x0.001. Existing defaults100/0/100 and saved values
+  retained; old saved values become effective. Related312 tests pass locally.
+  Fixed-input production replay of additional Ray00000003/0 matches1713
+  baseline commands within2.99e-8. Initial candidate100/50/100 adds mean-.022
+  m/s² at46..55s; Ki100 adds-.044. This is an estimate with recorded motion
+  fixed. Optimal gains/physical response/incident correspondence unverified.
+  Details docs/comma_pedal.md, private archive2026-11-11/ray-tuning.
+
+- 2026-11-11: Ioniq5 b4dcfe6ce00fe149 route8/7..10 on ed157919 confirms
+  ShareData0/xiaoge stopped, little-core load64..76%, but model56.29ms and
+  Jetson execution/completion39.13ms persist.947 frame gaps match invalid
+  odometry. Add root read-only low-priority observer under /run, sampled1Hz,
+  nvpmodel30s, CPU/GPU/EMC clocks/limits/load, rails, cooling, memory, topCPU
+  processes and server-thread scheduler wait. Cache with age/unavailable status;
+  comma jetsonPerformance events bind frame/USBseq/runtime/model and timings.
+  Use elapsed-time telemetry requests so dropped frame IDs cannot starve logs.
+  N16 signed host f07617011dc02856d1e0ae5fa649908f1d11387b published,67188353B,
+  SHA256 13aba9e1ad7068f537529987fdca71778918d74aaf64e73860fb0c120a990909.
+  HTTPS/signature verified. Jetson CI42963567764 passes2481/56skip plus other
+  groups; Windows installer/eGPU/docs pass. Normal GitPull and full comma/Jetson
+  reboot. Other model host pins unchanged. No vehicle install or real Jetson
+  sensor/overhead test;39ms root cause awaits new logs. Private evidence in
+  .analysis/scratch/2026-11-11-jetson-performance and 2026-11-11-ioniq5-route8.
+
+- 2026-11-11: Keep fixed SCC11 input case attached to Casper ac960474. New
+  RayEV53e037b67afdc67d/159e3a01 is CommaPedal. Supplied00000002/0 has no
+  longActive and all1385 commands disabled. Additional NAS00000003/0 has
+  active37.944..38.753 and43.163..end. At46..55s all900 requests negative
+  (mean-.179m/s²), actualmean+.146, speed70.88->75.61km/h, normalizedpedal
+  .418..505 and nativegas34..41%, no driver input/lead/currentCANerror/pedal
+  fault/TXblock. PID P/F active,I0. Fixed map and PR570 x2 raw scaling need
+  vehicle calibration/feedback review. Both handovers restartgas0, ramp.02/40ms,
+  raw8pairs reproduce, with about1m/s² decel. Additional route incident match
+  unconfirmed. Both rlogsdf90dirty versus suppliedheaderecdd. No production
+  change or validated fix. See docs/comma_pedal.md and private Ray archive.
+
+- 2026-11-11: Casper owner supplies normal 1f02/0,1 on older2ea4415ac,
+  recorded Nov11 on same ac960474 as Nov9 failure1ef4/12 b1c827468f.
+  Fixed10.4m/+0.2 absent in6053 plausible good objects, present2163/2217 bad.
+  Both good logs also have canState1 errorPassive/REC255, about4k errorIRQ/s
+  versus10k/s bad. Do not identify that passive condition alone as SCC cause.
+  SCC receiver/DBC/classic generator/Panda drivers unchanged between commits.
+  MAIN and steady-state forwarding audit do not explain difference. Exact
+  source SCC-method9150 and isolated full radar-controller3551 A/B outputs
+  match, including both versions accepting the bad object. Good dirty=true,
+  saved PandaSignatures differs, good early-boot versus baduptime729s confound
+  rollback inference. Failure NAS11..14 empty, archived12 available. Upstream
+  freeze trigger/causal commit unresolved. No production change. Details in
+  docs/casper_scc_input_20261109.md, private archive2026-11-11/casper-version.
+
+- 2026-11-11: Owner requests state2 trial after I5PE11c8/2 rollback with real
+  radar lead41 maintained. Camera-SCC final ACCMode1/StopReq1 now promotes
+  receding real-lead state1 to SCC_ObjSta2, alongside existing no-lead state0
+  fallback. Scope chosen for final stop packets; departure restores normal
+  relative-speed mapping. Four regressions fail before, related261 pass after.
+  Eight-log full-builder A/B23987calls changes475 object-state/CRC packets,
+  23512 identical; acceleration/phase/synthetic-marker outputs agree. OEM
+  parity remains partial: I5PE band.04 vs ours.20, target distance, InfoDisplay,
+  entry timing and trajectories differ. Prior nine failure entries had state2.
+  ESC acceptance and physical hold effect remain unverified. Evidence private
+  .analysis/archive/2026-11-11/stop-state-trial and existing stop-object doc.
+
+- 2026-11-10: Use the actual Carrot cruise cancel latch, not cruise enablement
+  or a timeout, to pause automatic physical indicator requests until SET/RES or
+  +/- clears it. Keep the driver's lever and explicit BT signals independent.
+  Ioniq 5 PE 11c5/36 video shows the right-hand split near 56s. Current-state
+  right-lane probability was still low; the first two future forecast rows
+  agreed before the crossing. The optional model-desire lamp observes these
+  only with measured same-side boundary approach and existing ownership gates.
+  A/B replay through the lamp policy with a ready receiver: new right request
+  at 55.800s; the other 15 segments match. A forecast-owned widening fork
+  tracks far-side progress and lane relabeling while same-side intent persists;
+  11c5/36 owns one request until 58.698s. Replay does not prove physical light.
+
 - 2026-11-09: Fix the four full-build Bluetooth import failures previously
   reported as pre-existing. Cluster paths expose openpilot/tools as top-level
   tools, hiding root tools/jetlink even with the repository first on sys.path.

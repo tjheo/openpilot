@@ -117,25 +117,26 @@ Ignoring `x0.01`, `x0.001`, `cm`, `km/h`, or `%` can make a value appear one hun
 
 ## Settings map
 
-The current `carrot_settings.json` contains **212 parameters**. The driver-monitoring exception and `NNFF` are search only; the remaining entries appear in these menus:
+The current `carrot_settings.json` contains **213 parameters**. `NNFF` is search only; menu counts below exclude detail-only items. `DriverMonitoringEnabled` remains visible in the Driver Monitor group.
 
 | Category | Count | Groups |
 |---|---:|---|
-| Driving control | 128 | Startup and auto, buttons and presets, steering, speed and deceleration, cruise and following gap |
-| Vehicle and hardware | 18 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
+| Driving control | 136 | Startup and auto, Tesla, buttons and presets, steering, speed and deceleration, cruise and following gap |
+| Vehicle and hardware | 21 | Hyundai/Kia, CAN FD/HDA, radar, driver monitoring, vehicle assistance, device hardware |
 | Display | 34 | Information, path, brightness/on-road view, external HUD |
-| System | 12 | Recording/power, network/map, sound, software |
+| System | 9 | Recording/power, network/map, sound, software |
 
 ## Driving control
 
-These 128 settings can affect driving behavior. Change one item at a time.
+These 136 settings can affect driving behavior. Change one item at a time.
 
 <a id="start-auto"></a>
-### Startup and auto — 14 settings
+### Startup and auto — 9 settings; Tesla — 6 settings
 
 | Section | Parameters | Purpose |
 |---|---|---|
-| Startup | `AlwaysLateral`, `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `AutoEngage`, `DisableMinSteerSpeed` | Always-on lateral control, Tesla lamps/CAN red-light stop, automatic engagement, and low-speed steering limits |
+| Startup | `AlwaysLateral`, `AutoEngage`, `DisableMinSteerSpeed` | Always-on lateral control, automatic engagement, and low-speed steering limits |
+| Driving > Tesla > Tesla Features | `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`, `TeslaAutoSpeedLimit` | Six independent default-OFF switches; restart required |
 | Auto cruise | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | Automatic cruise activation and accelerator-pedal behavior |
 
 - `AlwaysLateral` permits lateral control even when cruise is not engaged. Tesla's three-finger screen contact toggles it live instead of Experimental Mode; OFF does not disengage steering under active driving control. On supported Tesla vehicles it can also steer at true standstill in a forward-driving gear; moving below the minimum steering speed remains restricted. See [Tesla engagement](tesla.md#engagement-and-standstill).
@@ -146,6 +147,7 @@ These 128 settings can affect driving behavior. Change one item at a time.
 - `TeslaCanTrafficStop`: independent default-OFF Tesla CAN red-light stopping; restart required. Requires actual openpilot longitudinal control and the exact supported 8-byte vision-backed APP profile, not stock TACC. Below 126 m, confirmed red adds a stop constraint; green releases only its own constraint. Signal failure requests takeover/soft-disable. Other brands ignore it; see [Tesla CAN stopping](tesla.md#can-red-light-stopping) for protocol, pedal override and closed-course validation limits.
 - `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: independent default-OFF Tesla lamp-only observations; reboot required. All require `TeslaAutoTurnSignals`, `ShareData`, fresh repeated ONNX dashed classification and supported adjacent-lane geometry above 30 km/h. Manual torque/approach can work without cruise; model desire/path predictions require active lateral control and can light early or falsely. Solid/dashed does not prove colour or traffic direction. No steering permission, navigation turn preannouncement or U-turn implementation is added; see the [Tesla guide](tesla.md#optional-lane-change-lamp-observations) for completion, timestamp and physical-validation limits.
 - `AutoCruiseControl` covers Hyundai/Kia auto-cruise and soft-hold behavior.
+- `TeslaAutoSpeedLimit`: default OFF; full restart required. ON permits automatic speed-wheel adjustment toward the vehicle DAS limit with extension CAN and alpha longitudinal; OFF removes automatic wheel output, not manual scrolling. Previously implicit activation now requires opting in. Active navigation/Carrot speed control still pauses it; see [automatic cruise set speed](tesla.md#automatic-cruise-speed).
 - `DisableMinSteerSpeed` is vehicle-specific and relates to low-speed steering restrictions on SMDPS-equipped cars.
 
 ### Buttons and presets — 15 settings
@@ -236,7 +238,7 @@ While external navigation is connected, deceleration, countdowns, and navigation
 | [Driving mode](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | Eco, safe, normal, high-speed modes and automatic selection |
 | [Speed-based acceleration](cruise-gap.md#acceleration-table) | `CruiseMaxVals0` through `CruiseMaxVals6` | Maximum acceleration tendency by speed band |
 | [Stopping and restarting](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | Stop position, stop entry, and restart behavior |
-| [Longitudinal tuning](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | Hyundai/Kia/Genesis fix/hide `100/0/100`; Toyota/Lexus fix/hide `0/0/100`; VW MEB, including ID.4, applies saved gains |
+| [Longitudinal tuning](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | Ray EV Comma Pedal applies saved gains; other Hyundai/Kia/Genesis fix/hide `100/0/100`; Toyota/Lexus fix/hide `0/0/100`; VW MEB, including ID.4, applies saved gains |
 | [Following gap](cruise-gap.md#following-gap) | `TFollowGap1` through `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | Gap times, lane-change relief using selected leads, and deceleration margin (default 0%) |
 | [Following responsiveness](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | Lead-start, acceleration and approach response at every following-distance level |
 | [Carrot cruise](cruise-gap.md#carrot-cruise) | `CruiseEcoControl`, `CruiseCoastingPercent`, `CarrotCruiseDecel`, `CarrotCruiseAtcDecel` | Economy control, coasting margin with a fixed entry reference (default 0%: existing control), and cruise deceleration limits |
@@ -256,7 +258,7 @@ Eco caps lead response at 2 and Safe at 3; Normal and High retain the selected v
 
 Deceleration preview operates independently of the response level. During active control, remaining correction releases progressively when relative acceleration eases or the lead switches between radar and vision or disappears. Accelerator or brake intervention and longitudinal control exit clear it immediately.
 
-`LongTuning*` and `LongActuatorDelay` are advanced settings that directly affect vehicles using openpilot longitudinal control. Hyundai, Kia, and Genesis fix `LongTuningKpV`, `LongTuningKiV`, and `LongTuningKf` at the safe `100/0/100` values and hide them from settings. Toyota/Lexus fix and hide common gains at `0/0/100` to avoid duplicate correction before their dedicated controller. Some parameters have no effect when stock ACC remains responsible for acceleration and braking.
+`LongTuning*` and `LongActuatorDelay` are advanced settings that directly affect vehicles using openpilot longitudinal control. Identified Ray EV Comma Pedal configurations expose these gains and apply saved values to speed PID. Other Hyundai, Kia, and Genesis configurations fix `LongTuningKpV`, `LongTuningKiV`, and `LongTuningKf` at the safe `100/0/100` values and hide them from settings. Toyota/Lexus fix and hide common gains at `0/0/100` to avoid duplicate correction before their dedicated controller. Some parameters have no effect when stock ACC remains responsible for acceleration and braking.
 
 `StoppingAccel` is adjustable again: default `-50`, range `-100 to -50`, step `10`. The stored value is multiplied by 0.01, with the same bounds enforced by control. Original stop-entry and braking behavior and vehicle-specific soft hold are restored; changes apply within about one second. See [Stopping and restarting](cruise-gap.md#stop-resume).
 
@@ -264,7 +266,7 @@ Deceleration preview operates independently of the response level. During active
 
 For Hyundai/Kia CANFD openpilot longitudinal control, aReqRaw and aReqValue become zero in the first StopReq frame, so this setting does not change transmitted acceleration while StopReq remains active. Automatic release/retry is removed.
 
-On supported Tesla vehicles with the additional vehicle bus detected, the device's **alpha longitudinal** (`AlphaLongitudinalEnabled`) toggle also enables [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) to the vehicle-reported limit. Navigation/Carrot speed control takes precedence and pauses DAS-based adjustment until it ends and the limit is stable again; any manual pause remains in effect. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. There is no separate Carrot Web setting for this feature.
+On supported Tesla vehicles, [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) requires the additional vehicle bus, **alpha longitudinal** (`AlphaLongitudinalEnabled`) and Carrot Web's `TeslaAutoSpeedLimit`. The new switch defaults to OFF and requires a full restart after changes. Navigation/Carrot speed control still takes precedence and pauses DAS-based adjustment until it ends and the limit is stable again; any manual pause remains in effect. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. OFF stops automatic wheel output without disabling manual scrolling.
 
 <a id="vehicle-hardware"></a>
 ## Vehicle and hardware
@@ -409,7 +411,7 @@ The Replay event timeline also identifies Carrot Navi connection and route-sessi
 <a id="system"></a>
 ## System
 
-The 12 system settings cover recording, power, network, maps, sound, and software menus.
+The 9 system settings cover recording, power, network, maps, sound, and software menus.
 
 | Group | Parameters | Purpose |
 |---|---|---|
@@ -478,7 +480,7 @@ camera supplies 20fps. Reduced processing overhead does not establish sustained
 
 ## Automatic turn signals (supported vehicles)
 
-`AutoBlinkerControl` — Settings > Driving > Steering > Lane Change (Auto Turn). Default: 0. Currently limited to the Ioniq 5 PE, Jetson and PEAK USB-CAN/B1 profile on carrot-wip.
+`AutoBlinkerControl` — Settings > Driving > Steering > Lane Change (Auto Turn). Default: 0. Currently limited to the Ioniq 5 PE, Jetson and PEAK USB-CAN/B1 profile on carrot-wip. Cruise CANCEL stops automatic indicator requests and releases an automatic hold. Parking maneuvers no longer trigger an indication until SET/RES or +/− clears the cruise cancel state. The stock lever and explicit Bluetooth indicator buttons remain available.
 
 ATC indication starts at audioTurn and persists through stops. A fresh cue can start at a full stop in Drive when lateral permission remains valid and steering is fault-free. After the receiver confirms send completion, both lamps staying off for 1.5 seconds permits one recovery attempt per turn, including an initially unlit request. Driver cancellation, communication failure or an unconfirmed send forbids retry. A fresh opposite-turn cue waits at most three seconds for physical completion of the preceding turn.
 
@@ -516,7 +518,7 @@ The manual lane-change indicator can request again after at least three seconds,
 
 An ATC recovery attempt has a new four-second activation deadline. It does not extend the five-minute maximum measured from the original request.
 
-`ModelDesireIndicator` and `ModelPathIndicator` are separate default-off indication-only options. See [lane changes](lane-change.md) for TBT distance holding and each feature’s start/end conditions.
+`ModelDesireIndicator` and `ModelPathIndicator` are separate default-off indication-only options. See [lane changes](lane-change.md) for TBT distance holding and each feature’s start/end conditions. At 30 km/h or above, the two nearest model forecasts can also trigger an indication when both predict the same lane change with at least 65% probability and both measured lane boundaries show the vehicle approaching that side. A forecast alone does not light the indicator or request steering. After forecast-based initiation, widening lane lines at a fork do not end the hold while the model and measured motion still indicate the same direction. Fading or opposite intent ends the fork hold; cruise CANCEL releases it immediately.
 
 Manual indication projects 0.3s of measured boundary approach, advancing the centre-to-boundary threshold by at most 0.3m. Existing speed, centre-line and road-edge gates remain.
 
