@@ -23,6 +23,7 @@ from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   get_lead_preview_request,
   rate_limit_preview,
 )
+from openpilot.selfdrive.controls.lib.longitudinal_early_decel import LeadEarlyDecelState
 from openpilot.selfdrive.controls.lib.turn_accel import get_future_curvature, limit_accel_in_turns
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
@@ -77,6 +78,9 @@ class LongitudinalPlanner:
     self.lead_preview_accel = 0.0
     self.lead_track_ids = [-1, -1]
     self.lead_track_frames = [0, 0]
+    self.lead_early_decel = LeadEarlyDecelState()
+    self.lead_early_decel_time = None
+    self.lead_early_decel_result = None
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -407,6 +411,9 @@ class LongitudinalPlanner:
       output_v_target_now = min(output_v_target_mpc, output_v_target_now_e2e)
       self.output_should_stop = output_should_stop_e2e or output_should_stop_mpc
 
+    output_a_target, output_v_target_now = self.apply_lead_early_decel(
+      sm, carrot, output_a_target, output_v_target_now, reset_state, force_slow_decel, cutin_predecel_limit)
+
     #for idx in range(2):
     #  accel_clip[idx] = np.clip(accel_clip[idx], self.prev_accel_clip[idx] - 0.05, self.prev_accel_clip[idx] + 0.05)
     #self.output_a_target = np.clip(output_a_target, accel_clip[0], accel_clip[1])
@@ -422,6 +429,47 @@ class LongitudinalPlanner:
     self.apply_signal_start_guard(carrot, v_ego)
     if getattr(self, 'tesla_traffic_decision', None) is not None:
       self.apply_tesla_traffic_stop()
+
+  def apply_lead_early_decel(self, sm, carrot, a_target, v_target_now, reset_state, force_slow_decel,
+                             cutin_predecel_limit, now=None):
+    """LeadEarlyDecel/LeadSmoothStop. OFF, or any inhibit, returns the inputs unchanged."""
+    now = time.monotonic() if now is None else now
+    dt = self.dt if self.lead_early_decel_time is None else now - self.lead_early_decel_time
+    self.lead_early_decel_time = now
+    cs = sm['carState']
+    tesla_active = bool(getattr(self, 'tesla_traffic_decision', None) and self.tesla_traffic_decision.active)
+    enabled = bool(
+      getattr(carrot, 'leadEarlyDecel', False)
+      and self.mpc.mode == 'acc' and not getattr(self, 'tesla_traffic_blended', False) and not tesla_active
+      and not reset_state and not force_slow_decel
+      and not cs.gasPressed and not cs.brakePressed and not cs.standstill
+      and not carrot.soft_hold_active and not getattr(carrot, 'lane_change_active', False)
+      and not self.fcw and self.mpc.crash_cnt == 0 and not self.output_should_stop
+    )
+    # Easing an MPC target is only allowed when the confirmed stationary leadOne
+    # is the binding obstacle of a converged solve, without any cut-in risk.
+    relief_allowed = (
+      self.mpc.source == 'lead0' and self.mpc.solution_status == 0 and cutin_predecel_limit is None
+    )
+    result = self.lead_early_decel.update(
+      enabled=enabled,
+      smooth_stop_enabled=bool(getattr(carrot, 'leadSmoothStop', False)),
+      relief_allowed=relief_allowed,
+      dt=dt,
+      base_accel=a_target,
+      v_ego=cs.vEgo,
+      a_ego=cs.aEgo,
+      lead=sm['radarState'].leadOne,
+      t_follow=self.mpc.t_follow,
+      stop_distance=carrot.stop_distance,
+    )
+    self.lead_early_decel_result = result
+    if not result.active:
+      return a_target, v_target_now
+    # Keep the velocity target consistent with the corrected acceleration.
+    v_corrected = max(0.0, cs.vEgo + result.accel * self.dt)
+    v_target_now = min(v_target_now, v_corrected) if result.accel < a_target else max(v_target_now, v_corrected)
+    return result.accel, v_target_now
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
     from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked

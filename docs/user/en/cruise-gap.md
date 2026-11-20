@@ -284,6 +284,18 @@ Enabled by default. With neither vehicle decelerating, only extra comfort TF hea
 
 OFF restores the existing 5/4/3/2/1-second mapping and hold rules in the table below. Changes apply at the settings refresh; installing updated vehicle code requires normal GitPull/restart. Actual gap-closing time and comfort are not guaranteed. This is not a terminal braking taper.
 
+### `LeadEarlyDecel` · Early gentle approach braking
+
+Enabled by default. When approaching a slower or stopped lead, braking starts gently from farther away instead of late and hard. While closing by at least 0.5m/s on a lead confirmed by radar and vision (same radar track for at least 0.5s, vision probability at least 0.5, or 0.7 for a stopped lead, within 120m or 100m for a stopped lead), it computes the constant deceleration that matches the lead speed at the existing target gap (`TF × lead speed + stopping distance`). Above 0.3m/s² it progressively requests 1.15x that deceleration (full at 0.7m/s²), capped at 1.5m/s² and a braking build-up jerk of 1.0m/s³. It fades out below 3m/s and leaves the existing plan alone below 1.5m/s.
+
+Only the stronger of this request and the existing plan is used, so braking never becomes weaker and the target gap, stopping position and physical obstacles are unchanged. No new braking is added for a lead pulling away or predicted to pull away within 1.5s, low-probability or radar-unconfirmed leads, the first 0.5s of a new lead or cut-in, accelerator/brake pedal input, FCW, lane changes, stop decisions, soft hold or standstill, experimental mode or Tesla traffic stops. It releases at 1.5m/s³. Early braking for traffic lights remains handled by the existing signal-stop logic, not this setting.
+
+### `LeadSmoothStop` · Smooth stop behind stopped lead
+
+Enabled by default. It works only with `LeadEarlyDecel` enabled and after that feature has already braked early (at least 0.3m/s²) for the same stopped lead. When that lead is the binding plan obstacle of a converged solve without cut-in risk, it computes the deceleration needed to stop before the stopping gap after subtracting travel during a 0.4s reaction lag and a 1.5m buffer. If the existing plan brakes harder, it is eased only down to `1.2 × need + 0.05m/s²` (at least 0.3m/s²) and by at most 1.0m/s² relative to the plan. The easing allowance grows at 2.0m/s³ on entry and hands back to the plan progressively below 1.5m/s.
+
+If the need exceeds 1.5m/s² or the remaining distance is insufficient, or confirmation is lost, or FCW, a cut-in, a second lead or a traffic stop line becomes the closer constraint, legacy braking applies immediately. This does not release the brakes to finish a stop and never moves the stopping point closer. The stopping state (`StoppingAccel`), standstill/soft/incline hold and CAN-FD stop requests are unchanged. OFF restores legacy final braking.
+
 ### `LeadAccelResponse` · Common value
 
 Sets lead-start and acceleration response for gaps configured to use the common value. Levels 1–3 soften small changes and response near the target gap; level 4 is quick and level 5 retains the immediate maximum response. The selected TF remains the reference; a separate lead-jerk adjustment no longer expands or shrinks TF.
