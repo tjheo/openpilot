@@ -265,7 +265,7 @@ For a clean baseline, use `SpeedTFFactor=10`, `DynamicTFollowLC=100`, `MyDriving
 <a id="lead-response"></a>
 ## 6. Following responsiveness
 
-Use `LeadAccelResponse` to adjust response to a lead starting, accelerating or being approached. Its range is 0–5; the default 0 disables acceleration boost and recovers extra TF most slowly.
+Use `LeadAccelResponse` to adjust response to a lead starting, accelerating or being approached. Its range is 0–5; the default 0 disables acceleration boost. Extra-TF recovery follows the level together with `LeadGapRecoveryFast`.
 
 ### `LeadAccelResponseTF1`–`LeadAccelResponseTF4`
 
@@ -277,6 +277,12 @@ Changing the cruise-gap level with the button while driving applies that gap's r
 - `0–5`: use this value at this gap. `0` is an explicit override, not inheritance.
 
 For example, set TF1 and TF2 to 50 and their responses to 5 and 3. Both use the same base following time, while the button changes response. The selected response controls both acceleration boost and recovery of extra headroom. A response-level change reinitializes headroom under the new response. The speed multiplier applies to every gap.
+
+### `LeadGapRecoveryFast` · Faster opening-gap recovery
+
+Enabled by default. With neither vehicle decelerating, only extra comfort TF headroom recovers faster when lead speed is above 5m/s and measured opening relative speed is above 0.2m/s. Application ramps over opening speed 0.2–1.0m/s and lead speed 5–7m/s; the recovery time scale is the smaller of the legacy level-specific value and 2 seconds. Base TF, stopping distance, physical leads, braking/acceleration bounds and jerk limits are unchanged. Stopped or approaching leads retain legacy behavior, and acceleration-boost levels are unchanged.
+
+OFF restores the existing 5/4/3/2/1-second mapping and hold rules in the table below. Changes apply at the settings refresh; installing updated vehicle code requires normal GitPull/restart. Actual gap-closing time and comfort are not guaranteed. This is not a terminal braking taper.
 
 ### `LeadAccelResponse` · Common value
 
@@ -310,6 +316,8 @@ Headroom applies to a stable radar lead in normal ACC. Accelerator override, dis
 Acquisition allowance ramps in over 0.8 seconds with zero slope at both ends. Afterward, measured relative speed filtered with a 0.3-second time constant above 0.2m/s holds or replenishes headroom subject to the distance band below. The internal headroom target rises at no more than 0.5 TF seconds per second, and applied extra TF follows it smoothly. Candidates are absolute targets, not repeatedly added increments.
 
 When relative speed settles or the gap closes, two filter stages recover the headroom. Applied TF retains its rate of change across hold, replenishment and recovery; ongoing replenishment can briefly continue raising it before it falls. A newly acquired slower or stopped lead can receive initial headroom without an opening gap. Outside the distance band, headroom also recovers for a stopped lead.
+
+The table describes OFF or conditions outside faster recovery. When enabled and eligible, headroom recovers even while the gap opens; at full application, levels 0–2 have a 2-second time scale.
 
 | Level | Base recovery time scale | Extra TF |
 |---|---:|---|

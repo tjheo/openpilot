@@ -33,7 +33,7 @@ class LeadGapState:
     self.relative_speed = 0.0
 
   def update(self, *, level, track_id, enabled, dt, ego_speed, lead_speed, relative_speed,
-             distance, desired_distance, base_tf, stop_distance=6.0):
+             distance, desired_distance, base_tf, stop_distance=6.0, fast_recovery=False):
     values = (dt, ego_speed, lead_speed, relative_speed, distance, desired_distance, base_tf, stop_distance)
     if (not enabled or level not in range(len(RECOVERY_TAU)) or track_id < 0
         or not all(map(math.isfinite, values)) or dt <= 0.0 or ego_speed < 0.0 or distance <= 0.0 or base_tf < 0.0 or stop_distance < 0.0):
@@ -58,8 +58,17 @@ class LeadGapState:
       # must not enlarge the distance used to decide whether to keep it.
       release = distance_recovery_weight(distance, ego_speed, base_tf, stop_distance)
       target = max(candidate, self.recovery_tf, self.extra_tf) if self.filtered_relative_speed > OPENING_SPEED else None
+      # Faster recovery spends only positive comfort headroom. Keep legacy
+      # acquisition, stopped/closing-lead behavior and all physical constraints.
+      opening_strength = (entry_weight(min(1.0, max(0.0, (relative_speed - OPENING_SPEED) / 0.8)))
+                          * entry_weight(min(1.0, max(0.0, (lead_speed - FULL_RECOVERY_SPEED) / 2.0)))) if fast_recovery else 0.0
+      release = max(release, opening_strength)
+      # Blend the rate, not the filter states: toggling never discards headroom.
+      legacy_tau = RECOVERY_TAU[level]
+      tau = (1.0 / ((1.0 - opening_strength) / legacy_tau + opening_strength / min(legacy_tau, 2.0))
+             if opening_strength > 0.0 else legacy_tau)
       self.recovery_tf, self.extra_tf = advance_headroom(
-        self.recovery_tf, self.extra_tf, target, dt, lead_speed, RECOVERY_TAU[level], cap, release)
+        self.recovery_tf, self.extra_tf, target, dt, lead_speed, tau, cap, release)
 
     self.extra_tf = min(cap, self.extra_tf)
     self.recovery_tf = min(cap, self.recovery_tf)
@@ -69,7 +78,7 @@ class LeadGapState:
     return self.extra_tf * entry_weight(self.strength)
 
   def margins(self, *, level, times, ego_speeds, lead_speeds, base_tf,
-              lead_distances=None, desired_distances=None, stop_distance=6.0):
+              lead_distances=None, desired_distances=None, stop_distance=6.0, fast_recovery=False):
     if self.key is None or level not in range(len(RECOVERY_TAU)):
       return np.zeros_like(times)
     # Roll a copy through the SAME capture, entry and recovery rules. Anchor
@@ -94,7 +103,8 @@ class LeadGapState:
         predicted.update(level=level, track_id=self.key[1], enabled=True, dt=dt,
                          ego_speed=float(ego_speeds[i]), lead_speed=float(lead_speeds[i]),
                          relative_speed=float(relative_speeds[i]), distance=max(1e-3, float(lead_distances[i])),
-                         desired_distance=float(desired_distances[i]), base_tf=base_tf, stop_distance=stop_distance)
+                         desired_distance=float(desired_distances[i]), base_tf=base_tf, stop_distance=stop_distance,
+                         fast_recovery=fast_recovery)
       margins[i] = max(0.0, ego_speeds[i]) * min(predicted.extra_tf, max(0.0, MAX_TOTAL_TF - base_tf)) * entry_weight(predicted.strength)
       previous_time = t
     return margins

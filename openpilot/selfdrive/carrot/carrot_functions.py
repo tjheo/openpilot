@@ -146,6 +146,7 @@ class CarrotPlanner:
     self.tFollowGap3 = 1.45
     self.tFollowGap4 = 1.6
 
+    self.leadGapRecoveryFast = self.params.get_bool("LeadGapRecoveryFast")
     self.leadAccelResponse = 0
     self.leadAccelResponseBase = 0
     self.leadAccelResponseTF = [-1] * 4
@@ -213,6 +214,7 @@ class CarrotPlanner:
       self.tFollowGap2 = self.params.get_float("TFollowGap2") / 100.
       self.tFollowGap3 = self.params.get_float("TFollowGap3") / 100.
       self.tFollowGap4 = self.params.get_float("TFollowGap4") / 100.
+      self.leadGapRecoveryFast = self.params.get_bool("LeadGapRecoveryFast")
       self.leadAccelResponseBase = int(np.clip(self.params.get_int("LeadAccelResponse"), 0, 5))
       self.leadAccelResponseTF = [int(np.clip(self.params.get_int(f"LeadAccelResponseTF{i}"), -1, 5)) for i in range(1, 5)]
       self.dynamicTFollowLC = self.params.get_float("DynamicTFollowLC") / 100.

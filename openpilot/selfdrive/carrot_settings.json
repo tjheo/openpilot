@@ -389,6 +389,7 @@
                 "TFollowGap2",
                 "TFollowGap3",
                 "TFollowGap4",
+                "LeadGapRecoveryFast",
                 "LeadAccelResponse",
                 "LeadAccelResponseTF1",
                 "LeadAccelResponseTF2",
@@ -3450,6 +3451,23 @@
       "max": 300,
       "default": 160,
       "unit": 5
+    },
+    {
+      "group": "차량간격",
+      "name": "LeadGapRecoveryFast",
+      "title": "벌어진 차간 빠른 회수",
+      "descr": "켜면 앞차와 우리 차가 감속하지 않고 앞차가 5m/s보다 빠르게 주행하며 0.2m/s보다 빠르게 멀어질 때 추가 편안함 여유만 더 빠르게 회수합니다. 상대속도 0.2~1.0m/s 및 앞차 속도 5~7m/s에서 점진 적용하며 회수 시간 척도는 최대 2초입니다. 기본 TF, 정지거리, 물리적 앞차 및 가감속·저크 제한은 그대로입니다. 정지·접근 중에는 기존 동작을 유지합니다. 끄면 기존 단계별 5/4/3/2/1초 회수입니다. 정차 제동 완화 기능은 아닙니다.",
+      "egroup": "FDIST",
+      "etitle": "Faster opening-gap recovery",
+      "edescr": "When enabled, with neither vehicle decelerating, recover only extra comfort headroom faster while the lead travels above 5m/s and pulls away above 0.2m/s. Application ramps over relative speeds 0.2–1.0m/s and lead speed 5–7m/s; the recovery time scale is capped at 2 seconds. Base TF, stopping distance, physical leads and acceleration/braking/jerk limits remain unchanged. Stopped and approaching leads retain legacy behavior. OFF restores legacy level-specific 5/4/3/2/1-second recovery. This does not taper stopping brakes.",
+      "cgroup": "跟车距离",
+      "ctitle": "更快回收增大的车距",
+      "cdescr": "开启时仅在前车速度超过5m/s且相对远离速度超过0.2m/s时更快回收额外舒适余量。基础TF、停车距离、物理目标和加减速及加加速度限制不变。关闭恢复原有分级回收，不改变停车制动。",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1,
+      "control": "toggle"
     },
     {
       "group": "차량간격",

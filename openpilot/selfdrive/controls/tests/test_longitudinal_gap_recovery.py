@@ -665,3 +665,133 @@ def test_mpc_passes_configured_stop_distance_to_live_and_prediction(mpc_class, m
   run_update(mpc_class, stop_distance=9.)
   assert {method for method, _ in calls} == {'update', 'margins'}
   assert all(distance == 9. for _, distance in calls)
+
+
+@pytest.mark.parametrize('level', range(5))
+def test_fast_opening_recovers_only_positive_extra_headroom(level):
+  legacy, fast = LeadGapState(), LeadGapState()
+  for frame in range(121):
+    distance = 28. + frame * .05
+    step(legacy, level=level, lead_speed=12., relative_speed=1., distance=distance,
+         desired_distance=20., base_tf=1.4, stop_distance=6., fast_recovery=False)
+    step(fast, level=level, lead_speed=12., relative_speed=1., distance=distance,
+         desired_distance=20., base_tf=1.4, stop_distance=6., fast_recovery=True)
+    assert fast.extra_tf >= 0.
+    assert fast.extra_tf <= legacy.extra_tf + 1e-12
+    margin = fast.margins(level=level, times=np.array([0., 1., 2.]),
+                         ego_speeds=np.full(3, 10.), lead_speeds=np.full(3, 12.),
+                         base_tf=1.4, stop_distance=6., fast_recovery=True)
+    assert np.all(margin >= 0.)  # never reduce the unmodified base reference
+  assert fast.extra_tf < legacy.extra_tf
+
+
+def test_fast_default_has_two_second_full_opening_recovery_scale():
+  legacy, fast = LeadGapState(), LeadGapState()
+  # Large synthetic stop gap keeps the legacy distance-release weight at zero.
+  step(legacy, lead_speed=12., relative_speed=1.)
+  step(fast, lead_speed=12., relative_speed=1., fast_recovery=True)
+  initial = fast.extra_tf
+  for _ in range(40):
+    step(legacy, lead_speed=12., relative_speed=1.)
+    step(fast, lead_speed=12., relative_speed=1., fast_recovery=True)
+  assert fast.extra_tf == pytest.approx(initial * 3. * math.exp(-2.))
+  assert fast.extra_tf < legacy.extra_tf * .5
+
+
+@pytest.mark.parametrize('lead_speed,vrel', [(0., 0.), (1., 1.), (5., 1.), (12., -.5), (12., .2)])
+def test_fast_stopped_slow_and_approaching_lead_matches_legacy(lead_speed, vrel):
+  legacy, fast = LeadGapState(), LeadGapState()
+  for _ in range(80):
+    step(legacy, lead_speed=lead_speed, relative_speed=vrel)
+    step(fast, lead_speed=lead_speed, relative_speed=vrel, fast_recovery=True)
+    assert vars(fast) == vars(legacy)
+
+
+def test_legacy_off_matches_original_source_for_live_and_forecast():
+  import subprocess
+  path = Path(__file__).resolve().parents[1] / 'lib/longitudinal_gap_recovery.py'
+  root = path.parents[4]
+  old = subprocess.check_output(['git', '-C', str(root), 'show',
+    '08eb61945c0e153e42d9f410159f5f9ca9bb4b67:openpilot/selfdrive/controls/lib/longitudinal_gap_recovery.py'], text=True)
+  ns = {}
+  exec(compile(old, '<original-gap-recovery>', 'exec'), ns)
+  original, current = ns['LeadGapState'](), LeadGapState()
+  for i in range(160):
+    args = dict(level=i // 40, lead_speed=12. if i % 20 < 10 else 0.,
+                relative_speed=1. if i % 30 < 15 else -.4, distance=25. + i * .03,
+                base_tf=1.4, stop_distance=6.)
+    assert step(current, fast_recovery=False, **args) == step(original, **args)
+    assert vars(current) == vars(original)
+    kw = dict(level=args['level'], times=np.array([0., .5, 1., 2.]),
+              ego_speeds=np.full(4, 10.), lead_speeds=np.full(4, args['lead_speed']),
+              base_tf=1.4, stop_distance=6.)
+    np.testing.assert_array_equal(current.margins(fast_recovery=False, **kw), original.margins(**kw))
+
+
+@pytest.mark.parametrize('lead_index', [0, 1])
+@pytest.mark.parametrize('ego_accel,lead_accel,enabled', [(0., 1., True), (-.1, 1., False), (0., -.1, False)])
+def test_fast_recovery_wiring_keeps_braking_legacy(mpc_class, monkeypatch, lead_index, ego_accel, lead_accel, enabled):
+  # Use the existing recording-solver adapter: wiring, not physical/solver proof.
+  calls = []
+  original = LeadGapState.update
+  def record(self, **kwargs):
+    if kwargs['track_id'] == 49:
+      calls.append(kwargs.get('fast_recovery', False))
+    return original(self, **kwargs)
+  monkeypatch.setattr(LeadGapState, 'update', record)
+  # Existing adapter fixtures can explicitly exercise the new preference by
+  # adding it before the real MPC update rather than changing solver outputs.
+  update = mpc_class.update
+  def configured(self, carrot, *args, **kwargs):
+    carrot.leadGapRecoveryFast = True
+    kwargs["measured_a_ego"] = ego_accel
+    return update(self, carrot, *args, **kwargs)
+  monkeypatch.setattr(mpc_class, 'update', configured)
+  run_update(mpc_class, level=0, lead_index=lead_index, ego_accel=ego_accel, lead_accel=lead_accel)
+  assert any(calls) == enabled
+
+
+def test_fast_toggle_default_catalog_and_stopping_guard_untouched():
+  import json
+  import subprocess
+  root = Path(__file__).resolve().parents[4]
+  catalog = json.loads((root / 'openpilot/selfdrive/carrot_settings.json').read_text())
+  def entries(value):
+    if isinstance(value, dict):
+      yield value
+      for child in value.values(): yield from entries(child)
+    elif isinstance(value, list):
+      for child in value: yield from entries(child)
+  setting = next(x for x in entries(catalog) if x.get('name') == 'LeadGapRecoveryFast')
+  assert (setting['min'], setting['max'], setting['default'], setting['control']) == (0, 1, 1, 'toggle')
+  assert '{"LeadGapRecoveryFast", {PERSISTENT, BOOL, "1"}}' in (root / 'openpilot/common/params_keys.h').read_text()
+  for file in ['openpilot/selfdrive/controls/lib/longitudinal_stopping_lead.py',
+               'openpilot/selfdrive/controls/lib/longcontrol.py',
+               'opendbc_repo/opendbc/car/hyundai/stopping.py']:
+    old = subprocess.check_output(['git', '-C', str(root), 'show', '08eb61945:'+file])
+    assert (root / file).read_bytes() == old
+
+
+@pytest.mark.parametrize('lead_accel,ego_accel', [(1., 0.), (-2., -.5)])
+def test_fast_toggle_keeps_mpc_physical_constraints_and_costs(mpc_class, monkeypatch, lead_accel, ego_accel):
+  update = mpc_class.update
+  def legacy(self, carrot, *args, **kwargs):
+    carrot.leadGapRecoveryFast = False
+    kwargs['measured_a_ego'] = ego_accel
+    return update(self, carrot, *args, **kwargs)
+  monkeypatch.setattr(mpc_class, 'update', legacy)
+  before = run_update(mpc_class, level=0, distance=40., speed=10., lead_speed=12.,
+                      lead_accel=lead_accel, ego_accel=ego_accel)
+  def fast(self, carrot, *args, **kwargs):
+    carrot.leadGapRecoveryFast = True
+    kwargs['measured_a_ego'] = ego_accel
+    return update(self, carrot, *args, **kwargs)
+  monkeypatch.setattr(mpc_class, 'update', fast)
+  after = run_update(mpc_class, level=0, distance=40., speed=10., lead_speed=12.,
+                     lead_accel=lead_accel, ego_accel=ego_accel)
+  np.testing.assert_array_equal(before.params, after.params)
+  np.testing.assert_array_equal(before.base_desired_distances, after.base_desired_distances)
+  for key in before.solver.weights:
+    np.testing.assert_array_equal(before.solver.weights[key], after.solver.weights[key])
+  if lead_accel < 0.:
+    np.testing.assert_array_equal(before.yref, after.yref)

@@ -351,6 +351,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"TFollowGap3", {PERSISTENT, INT, "140"}},
     {"TFollowGap4", {PERSISTENT, INT, "160"}},
 
+    {"LeadGapRecoveryFast", {PERSISTENT, BOOL, "1"}},
     {"LeadAccelResponse", {PERSISTENT, INT, "0"}},
     {"LeadAccelResponseTF1", {PERSISTENT, INT, "-1"}},
     {"LeadAccelResponseTF2", {PERSISTENT, INT, "-1"}},
